@@ -49,7 +49,8 @@ async function fetchCurrentTabStats() {
     const domain = url.hostname.replace('www.', '').replace('members.', '');
     const supportedDomains = [
       'blacked.com', 'tushy.com', 'vixen.com', 'blackedraw.com',
-      'tushyraw.com', 'deeper.com', 'milfy.com', 'slayed.com'
+      'tushyraw.com', 'deeper.com', 'milfy.com', 'slayed.com',
+      'vixenplus.com'
     ];
 
     if (!supportedDomains.includes(domain)) {
@@ -57,7 +58,7 @@ async function fetchCurrentTabStats() {
     }
 
     // Check if we're on a video page
-    if (!url.pathname.includes('/video/')) {
+    if (!url.pathname.includes('/videos/')) {
       throw new Error('This is not a video page');
     }
 
