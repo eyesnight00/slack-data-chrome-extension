@@ -1,51 +1,74 @@
 // Global Video Card Detection and Processing
 
+// Common selectors for video cards
+const VIDEO_CARD_SELECTORS = [
+  '[data-test-component="VideoThumbnailContainer"]',
+  '[data-test-component="VideoThumbnailPreview"]',
+  '[data-test-component="ProgressiveImage"]'
+];
+
 /**
  * Checks if the current page contains video cards
  * @returns {boolean} True if the page contains video cards
  */
 function isPageWithVideoCards() {
-  const selectors = [
-    '[data-test-component="VideoThumbnailContainer"]',
-    '[data-test-component="VideoThumbnailPreview"]',
-    '[data-test-component="ProgressiveImage"]'
-  ];
-
-  return selectors.some(selector => document.querySelector(selector) !== null);
-}
-
-/**
- * Processes all video cards on the current page
- * Implements lazy loading and batch processing
- */
-async function processGlobalVideoCards() {
-  console.log('[Stats Extension] Processing video cards across page');
+  for (const selector of VIDEO_CARD_SELECTORS) {
+    const elements = document.querySelectorAll(selector);
+    if (elements.length > 0) {
+      console.log('[Stats Extension] Found video cards using selector:', {
+        selector,
+        count: elements.length
+      });
+      return true;
+    }
+  }
   
-  // Implementation coming soon:
-  // 1. Set up Intersection Observer
-  // 2. Find all video cards
-  // 3. Process cards in viewport
-  // 4. Handle dynamic loading
+  console.log('[Stats Extension] No video cards found on page');
+  return false;
 }
 
 /**
- * Creates and adds grade overlay to a video card
- * @param {HTMLElement} card The video card element
- * @param {Object} gradeData The grade data to display
+ * Gets the total count of video cards on the page
+ * @returns {number} The number of video cards found
  */
-function addGradeOverlay(card, gradeData) {
-  // Implementation coming soon:
-  // 1. Create overlay element
-  // 2. Position correctly
-  // 3. Apply appropriate styling
-  // 4. Handle different layouts
+function getVideoCardCount() {
+  let totalCount = 0;
+  
+  for (const selector of VIDEO_CARD_SELECTORS) {
+    const elements = document.querySelectorAll(selector);
+    totalCount += elements.length;
+  }
+  
+  console.log('[Stats Extension] Found', totalCount, 'video cards on page');
+  return totalCount;
+}
+
+/**
+ * Gets all video card elements on the page
+ * @returns {Array<Element>} Array of video card elements
+ */
+function getAllVideoCards() {
+  const cards = [];
+  
+  for (const selector of VIDEO_CARD_SELECTORS) {
+    const elements = document.querySelectorAll(selector);
+    cards.push(...Array.from(elements));
+  }
+  
+  console.log('[Stats Extension] Retrieved all video cards:', {
+    total: cards.length,
+    selectors: VIDEO_CARD_SELECTORS
+  });
+  
+  return cards;
 }
 
 // Export functions for testing
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     isPageWithVideoCards,
-    processGlobalVideoCards,
-    addGradeOverlay
+    getVideoCardCount,
+    getAllVideoCards,
+    VIDEO_CARD_SELECTORS
   };
 }
