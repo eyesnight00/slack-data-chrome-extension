@@ -66,11 +66,12 @@
   - Red for E and F grades
   - Blue for unreleased videos
   - Gray for videos with no data
+- Implemented grade and score caching system
+  - Cache grades and scores for 24 hours
+  - Immediate display of cached grades on index pages
+  - Reduced API calls by only fetching uncached data
+  - Automatic cache cleanup for expired entries
 ### Planned Changes
-- Implement grade and score caching system
-  - Cache static metrics (grade and model_16 score)
-  - Improve performance on index pages
-  - Reduce API calls to Google Sheets
 - Fix navigation overlay issues
   - Properly cleanup overlays when navigating between pages
   - Maintain correct overlay state during navigation

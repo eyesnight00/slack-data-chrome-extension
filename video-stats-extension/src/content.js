@@ -2,6 +2,47 @@ console.log('[Stats Extension] Content script starting... banana');
 
 // Global variables
 let currentPageUrl = window.location.href;
+const CACHE_PREFIX = 'grade_cache_';
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+// Cache helper functions
+async function getCachedData(url) {
+  const cacheKey = CACHE_PREFIX + btoa(url);
+  const result = await chrome.storage.local.get(cacheKey);
+  
+  if (result[cacheKey]) {
+    const cachedData = result[cacheKey];
+    // Check if cache is still valid (within 24 hours)
+    if (Date.now() - cachedData.timestamp < CACHE_EXPIRY) {
+      console.log('[Stats Extension] Cache hit for URL:', {
+        url,
+        cached_data: cachedData
+      });
+      return cachedData;
+    } else {
+      console.log('[Stats Extension] Cache expired for URL:', url);
+      // Clean up expired cache
+      await chrome.storage.local.remove(cacheKey);
+    }
+  }
+  return null;
+}
+
+async function setCachedData(url, data) {
+  const cacheKey = CACHE_PREFIX + btoa(url);
+  const cacheData = {
+    grade: data.grade_model_16,
+    score: data.score_model_16,
+    timestamp: Date.now(),
+    is_future_release: data.is_future_release
+  };
+  
+  await chrome.storage.local.set({ [cacheKey]: cacheData });
+  console.log('[Stats Extension] Cached data for URL:', {
+    url,
+    cache_data: cacheData
+  });
+}
 
 // Create and inject the stats container
 function createStatsContainer() {
@@ -337,7 +378,8 @@ async function processVideoCards() {
 
   // Create a batch of URLs to process
   const cardMap = new Map();
-  const urls = [];
+  const urlsToFetch = [];
+  const cachedCards = new Map();
 
   for (const card of videoCards) {
     // Find the title link using the href pattern
@@ -349,24 +391,39 @@ async function processVideoCards() {
       continue;
     }
 
-    // Get the video URL and add to batch
+    // Get the video URL
     const videoUrl = titleLink.href;
     console.log('[Stats Extension] Found video URL:', videoUrl);
-    urls.push(videoUrl);
-    cardMap.set(videoUrl, card);
+
+    // Check cache first
+    const cachedData = await getCachedData(videoUrl);
+    if (cachedData) {
+      // Use cached data immediately
+      cachedCards.set(videoUrl, { card, data: cachedData });
+    } else {
+      // Add to batch for fetching
+      urlsToFetch.push(videoUrl);
+      cardMap.set(videoUrl, card);
+    }
   }
 
-  if (urls.length === 0) {
-    console.log('[Stats Extension] No valid URLs found in cards');
+  // Process cached cards immediately
+  for (const [url, { card, data }] of cachedCards) {
+    const gradeOverlay = createGradeOverlay(data.grade, data.is_future_release);
+    await addOverlayToCard(card, gradeOverlay);
+  }
+
+  if (urlsToFetch.length === 0) {
+    console.log('[Stats Extension] No URLs to fetch, all data from cache');
     return;
   }
 
   try {
-    // Request stats for all videos in batch
-    console.log('[Stats Extension] Requesting batch data for URLs:', urls);
+    // Request stats for uncached videos in batch
+    console.log('[Stats Extension] Requesting batch data for URLs:', urlsToFetch);
     const response = await chrome.runtime.sendMessage({
       type: 'GET_SHEET_DATA',
-      urls: urls
+      urls: urlsToFetch
     });
 
     console.log('[Stats Extension] Got batch response:', response);
@@ -384,6 +441,11 @@ async function processVideoCards() {
         continue;
       }
 
+      if (result.success && result.data) {
+        // Cache the new data
+        await setCachedData(url, result.data);
+      }
+
       // Create and add grade overlay
       const grade = result.success && result.data ? result.data.grade_model_16 : 'No Data';
       const isFutureRelease = result.success && result.data && result.data.is_future_release;
@@ -398,61 +460,61 @@ async function processVideoCards() {
       });
       
       const gradeOverlay = createGradeOverlay(grade, isFutureRelease);
-      
-      // Find the thumbnail preview div
-      const thumbnailPreview = card.querySelector('[data-test-component="VideoThumbnailPreview"]');
-      if (!thumbnailPreview) {
-        console.log('[Stats Extension] No thumbnail preview found for card:', {
-          url: url,
-          cardHTML: card.outerHTML.substring(0, 200) // First 200 chars for brevity
-        });
-        
-        // Try alternative selector
-        const altThumbnail = card.querySelector('[data-test-component="ProgressiveImage"]');
-        if (altThumbnail) {
-          console.log('[Stats Extension] Found alternative thumbnail container');
-          altThumbnail.style.position = 'relative';
-          
-          // Remove any existing overlay
-          const existingOverlay = altThumbnail.querySelector('.video-grade-overlay');
-          if (existingOverlay) {
-            existingOverlay.remove();
-          }
+      await addOverlayToCard(card, gradeOverlay);
+    }
+  } catch (error) {
+    console.error('[Stats Extension] Error processing video cards:', error);
+  }
+}
 
-          // Add the new overlay
-          altThumbnail.appendChild(gradeOverlay);
-          console.log('[Stats Extension] Successfully added grade overlay to alternative container:', {
-            grade,
-            backgroundColor: gradeOverlay.style.background,
-            textColor: gradeOverlay.style.color
-          });
-          continue;
-        }
-        continue;
-      }
-
-      console.log('[Stats Extension] Found thumbnail preview, applying styles');
-      // Make sure the container is positioned relatively
-      thumbnailPreview.style.position = 'relative';
+// Helper function to add overlay to card
+async function addOverlayToCard(card, gradeOverlay) {
+  // Find the thumbnail preview div
+  const thumbnailPreview = card.querySelector('[data-test-component="VideoThumbnailPreview"]');
+  if (!thumbnailPreview) {
+    console.log('[Stats Extension] No thumbnail preview found for card:', {
+      cardHTML: card.outerHTML.substring(0, 200) // First 200 chars for brevity
+    });
+    
+    // Try alternative selector
+    const altThumbnail = card.querySelector('[data-test-component="ProgressiveImage"]');
+    if (altThumbnail) {
+      console.log('[Stats Extension] Found alternative thumbnail container');
+      altThumbnail.style.position = 'relative';
       
       // Remove any existing overlay
-      const existingOverlay = thumbnailPreview.querySelector('.video-grade-overlay');
+      const existingOverlay = altThumbnail.querySelector('.video-grade-overlay');
       if (existingOverlay) {
         existingOverlay.remove();
       }
 
       // Add the new overlay
-      thumbnailPreview.appendChild(gradeOverlay);
-      console.log('[Stats Extension] Successfully added grade overlay:', {
-        url,
-        grade,
+      altThumbnail.appendChild(gradeOverlay);
+      console.log('[Stats Extension] Successfully added grade overlay to alternative container:', {
         backgroundColor: gradeOverlay.style.background,
         textColor: gradeOverlay.style.color
       });
+      return;
     }
-  } catch (error) {
-    console.error('[Stats Extension] Error processing video cards:', error);
+    return;
   }
+
+  console.log('[Stats Extension] Found thumbnail preview, applying styles');
+  // Make sure the container is positioned relatively
+  thumbnailPreview.style.position = 'relative';
+  
+  // Remove any existing overlay
+  const existingOverlay = thumbnailPreview.querySelector('.video-grade-overlay');
+  if (existingOverlay) {
+    existingOverlay.remove();
+  }
+
+  // Add the new overlay
+  thumbnailPreview.appendChild(gradeOverlay);
+  console.log('[Stats Extension] Successfully added grade overlay:', {
+    backgroundColor: gradeOverlay.style.background,
+    textColor: gradeOverlay.style.color
+  });
 }
 
 // Create grade overlay element
