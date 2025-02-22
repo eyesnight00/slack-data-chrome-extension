@@ -1,0 +1,12 @@
+# Build artifacts
+*.zip
+
+# IDE and system files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Dependency directories
+node_modules/ 
