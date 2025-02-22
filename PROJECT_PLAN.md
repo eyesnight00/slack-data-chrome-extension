@@ -49,6 +49,14 @@ Last Updated: [Current Date]
 - [ ] Cache implementation for faster lookups
 - [ ] Performance metrics tracking
 - [ ] User preferences storage
+- [ ] Global Video Card Detection
+  - [ ] Universal card detection across all pages
+  - [ ] Extended page type detection
+  - [ ] Batch grade processing
+  - [ ] Responsive overlay UI
+  - [ ] Performance optimization
+  - [ ] Error handling
+  - [ ] Testing coverage
 - [ ] Index page grade display
   - [ ] Video card URL extraction
   - [ ] Batch grade fetching

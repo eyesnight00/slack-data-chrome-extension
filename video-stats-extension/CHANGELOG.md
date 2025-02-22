@@ -82,6 +82,12 @@
   - Batch processing improvements
   - Memory usage optimization
   - Network request reduction
+- Global video card detection and grading
+  - Support for video cards across all pages
+  - Universal grade display implementation
+  - Extended page type detection
+  - Performance optimizations for widespread card detection
+  - Enhanced caching for cross-page support
 
 ## [2.0.1] - 2024-03-21
 ### Added

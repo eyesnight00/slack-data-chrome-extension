@@ -1,9 +1,114 @@
 console.log('[Stats Extension] Content script starting... banana');
 
+// Ensure the script runs immediately
+initialize();
+
 // Global variables
 let currentPageUrl = window.location.href;
 const CACHE_PREFIX = 'grade_cache_';
 const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+// Common selectors for video cards and containers
+const VIDEO_CARD_SELECTORS = [
+  '[data-test-component="VideoThumbnailContainer"]',
+  '[data-test-component="VideoThumbnailPreview"]',
+  '[data-test-component="ProgressiveImage"]',
+  '[data-test-component="VideoCard"]',
+  '[data-test-component="VideoCardContainer"]',
+  '[data-test-component="PerformerVideoCard"]',
+  // Add more general selectors that might be present on homepage
+  '[data-test-component="FeaturedVideo"]',
+  '[data-test-component="VideoPreview"]',
+  '[data-test-component="TrendingVideo"]',
+  '[data-test-component="RecommendedVideo"]'
+];
+
+// Common container selectors that indicate content is loaded
+const CONTENT_CONTAINER_SELECTORS = [
+  '[data-test-component="VideoGrid"]',
+  '[data-test-component="VideoList"]',
+  '[data-test-component="FeaturedVideos"]',
+  '[data-test-component="TrendingVideos"]',
+  '[data-test-component="RecommendedVideos"]',
+  '[data-test-component="HomePage"]',
+  '[data-test-component="MainContent"]',
+  'main',
+  '#root',
+  '#app'
+];
+
+// Check if we're on the homepage
+function isHomePage() {
+  const pathname = window.location.pathname;
+  const segments = pathname.split('/').filter(s => s.length > 0);
+  
+  const debug = {
+    type: 'HOME PAGE CHECK',
+    pathname,
+    segments_before_filter: pathname.split('/'),
+    segments_after_filter: segments,
+    segment_count: segments.length,
+    is_home_page: segments.length === 0 || (segments.length === 1 && segments[0] === '')
+  };
+
+  console.log('[Stats Extension] Checking if homepage:', debug);
+  return debug.is_home_page;
+}
+
+/**
+ * Checks if the current page contains video cards
+ * @returns {boolean} True if the page contains video cards
+ */
+function isPageWithVideoCards() {
+  for (const selector of VIDEO_CARD_SELECTORS) {
+    const elements = document.querySelectorAll(selector);
+    if (elements.length > 0) {
+      console.log('[Stats Extension] Found video cards using selector:', {
+        selector,
+        count: elements.length
+      });
+      return true;
+    }
+  }
+  
+  console.log('[Stats Extension] No video cards found on page');
+  return false;
+}
+
+/**
+ * Gets all video card elements on the page
+ * @returns {Array<Element>} Array of video card elements
+ */
+function getAllVideoCards() {
+  const cards = [];
+  const details = [];
+  
+  for (const selector of VIDEO_CARD_SELECTORS) {
+    const elements = document.querySelectorAll(selector);
+    const selectorResults = Array.from(elements);
+    cards.push(...selectorResults);
+    
+    details.push({
+      selector,
+      found: selectorResults.length,
+      elements: selectorResults.map(el => ({
+        tagName: el.tagName,
+        classes: Array.from(el.classList),
+        hasChildren: el.children.length > 0,
+        isVisible: el.offsetParent !== null
+      }))
+    });
+  }
+  
+  console.log('[Stats Extension] Video card detection details:', {
+    total: cards.length,
+    selectorResults: details,
+    timestamp: new Date().toISOString(),
+    documentState: document.readyState
+  });
+  
+  return cards;
+}
 
 // Cache helper functions
 async function getCachedData(url) {
@@ -12,19 +117,19 @@ async function getCachedData(url) {
   
   if (result[cacheKey]) {
     const cachedData = result[cacheKey];
-    // Check if cache is still valid (within 24 hours)
-    if (Date.now() - cachedData.timestamp < CACHE_EXPIRY) {
-      console.log('[Stats Extension] Cache hit for URL:', {
-        url,
-        cached_data: cachedData
-      });
-      return cachedData;
-    } else {
-      console.log('[Stats Extension] Cache expired for URL:', url);
-      // Clean up expired cache
-      await chrome.storage.local.remove(cacheKey);
-    }
+    // Since grades don't change, we can keep them indefinitely
+    console.log('[Stats Extension] Cache hit for URL:', {
+      url,
+      cached_data: cachedData,
+      cache_key: cacheKey
+    });
+    return cachedData;
   }
+  
+  console.log('[Stats Extension] Cache miss for URL:', {
+    url,
+    cache_key: cacheKey
+  });
   return null;
 }
 
@@ -40,8 +145,59 @@ async function setCachedData(url, data) {
   await chrome.storage.local.set({ [cacheKey]: cacheData });
   console.log('[Stats Extension] Cached data for URL:', {
     url,
+    cache_key: cacheKey,
     cache_data: cacheData
   });
+}
+
+// Batch cache operations
+async function batchGetCachedData(urls) {
+  const cacheKeys = urls.map(url => CACHE_PREFIX + btoa(url));
+  const result = await chrome.storage.local.get(cacheKeys);
+  
+  const cacheHits = new Map();
+  const cacheMisses = [];
+  
+  urls.forEach((url, index) => {
+    const cacheKey = cacheKeys[index];
+    if (result[cacheKey]) {
+      cacheHits.set(url, result[cacheKey]);
+    } else {
+      cacheMisses.push(url);
+    }
+  });
+  
+  console.log('[Stats Extension] Batch cache results:', {
+    total_urls: urls.length,
+    cache_hits: cacheHits.size,
+    cache_misses: cacheMisses.length
+  });
+  
+  return { cacheHits, cacheMisses };
+}
+
+async function batchSetCachedData(results) {
+  const cacheData = {};
+  
+  for (const [url, result] of Object.entries(results)) {
+    if (result.success && result.data) {
+      const cacheKey = CACHE_PREFIX + btoa(url);
+      cacheData[cacheKey] = {
+        grade: result.data.grade_model_16,
+        score: result.data.score_model_16,
+        timestamp: Date.now(),
+        is_future_release: result.data.is_future_release
+      };
+    }
+  }
+  
+  if (Object.keys(cacheData).length > 0) {
+    await chrome.storage.local.set(cacheData);
+    console.log('[Stats Extension] Batch cached data:', {
+      urls_cached: Object.keys(cacheData).length,
+      cache_keys: Object.keys(cacheData)
+    });
+  }
 }
 
 // Create and inject the stats container
@@ -273,48 +429,260 @@ function isIndexPage() {
 
 // Initialize when the page loads
 function initialize() {
-  console.log('[Stats Extension] Initializing on URL:', window.location.href);
+  console.log('[Stats Extension] Initializing extension...', {
+    url: window.location.href,
+    pathname: window.location.pathname,
+    documentReady: document.readyState,
+    bodyExists: !!document.body,
+    headExists: !!document.head,
+    timestamp: new Date().toISOString()
+  });
+
+  // Handle different document ready states
+  if (document.readyState === 'loading') {
+    console.log('[Stats Extension] Document still loading, adding load event listener');
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('[Stats Extension] DOMContentLoaded fired, proceeding with initialization');
+      initializeAfterLoad();
+    });
+  } else if (document.readyState === 'interactive' || document.readyState === 'complete') {
+    console.log('[Stats Extension] Document already interactive/complete, proceeding with initialization');
+    initializeAfterLoad();
+  }
+
+  // Add a fallback to ensure initialization happens
+  window.addEventListener('load', () => {
+    console.log('[Stats Extension] Window load event fired, ensuring initialization');
+    initializeAfterLoad();
+  });
+}
+
+// Add intersection observer to detect when new content comes into view
+function setupIntersectionObserver() {
+  console.log('[Stats Extension] Setting up intersection observer for infinite scroll');
+  
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        console.log('[Stats Extension] New content scrolled into view, checking for unprocessed cards');
+        processVideoCards();
+      }
+    });
+  }, {
+    rootMargin: '50px' // Start loading slightly before content comes into view
+  });
+
+  // Observe all video grid containers
+  function observeContainers() {
+    const containers = document.querySelectorAll([
+      '[data-test-component="VideoGrid"]',
+      '[data-test-component="VideoList"]',
+      '[data-test-component="InfiniteScroll"]',
+      '[data-test-component="HomePage"]'
+    ].join(','));
+
+    containers.forEach(container => {
+      observer.observe(container);
+      console.log('[Stats Extension] Observing container for scroll:', container);
+    });
+  }
+
+  // Initial observation
+  observeContainers();
+
+  // Set up mutation observer to watch for new containers
+  const containerObserver = new MutationObserver(debounce(() => {
+    observeContainers();
+  }, 1000));
+
+  containerObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
+}
+
+function initializeAfterLoad() {
+  console.log('[Stats Extension] Starting initialization after document load', {
+    url: window.location.href,
+    isHomePage: isHomePage(),
+    isVideoPage: isVideoPage(),
+    isIndexPage: isIndexPage(),
+    documentState: document.readyState
+  });
   
   // Clean up any existing overlays before initializing
   cleanupOverlays();
   
+  // Special handling for video detail pages
   if (isVideoPage()) {
-    console.log('[Stats Extension] Video page detected, fetching stats');
+    console.log('[Stats Extension] Video detail page detected, fetching stats');
     fetchVideoStats();
-  } else if (isIndexPage()) {
-    console.log('[Stats Extension] Index page detected, processing video cards');
-    processVideoCards();
-  } else {
-    console.log('[Stats Extension] Not a supported page type (not an index or video page)');
+    return;
+  }
+  
+  // For homepage and other pages with video cards
+  if (isHomePage() || isIndexPage()) {
+    console.log('[Stats Extension] Homepage or index page detected, starting content detection');
+    // Start both content detection processes
+    startContentDetection();
+    setupIntersectionObserver();
+    
+    // Immediate check for video cards
+    const cards = getAllVideoCards();
+    if (cards.length > 0) {
+      console.log('[Stats Extension] Found video cards immediately, processing');
+      processVideoCards();
+    }
+    
+    // Set up a backup check in case the initial check misses some cards
+    setTimeout(() => {
+      const delayedCards = getAllVideoCards();
+      if (delayedCards.length > cards.length) {
+        console.log('[Stats Extension] Found additional cards in delayed check', {
+          initialCount: cards.length,
+          newCount: delayedCards.length
+        });
+        processVideoCards();
+      }
+    }, 2000);
   }
 }
 
-// Function to safely initialize
-function safeInitialize() {
-  console.log('[Stats Extension] Safe initialize called:', {
-    ready_state: document.readyState,
-    body_exists: !!document.body,
-    head_exists: !!document.head,
-    timestamp: new Date().toISOString(),
-    url: window.location.href,
-    pathname: window.location.pathname
-  });
+async function startContentDetection() {
+  console.log('[Stats Extension] Starting content detection process');
+  
+  let retryCount = 0;
+  const maxRetries = 20; // Increase max retries
+  const retryInterval = 500; // Decrease interval for more frequent checks
 
-  // Wait for body to be available
-  if (!document.body) {
-    console.log('[Stats Extension] No body yet, waiting...');
-    const observer = new MutationObserver((mutations, obs) => {
-      if (document.body) {
-        console.log('[Stats Extension] Body now available');
-        obs.disconnect();
-        initialize();
-      }
+  async function checkForContent() {
+    console.log('[Stats Extension] Content detection attempt', {
+      attempt: retryCount + 1,
+      maxRetries,
+      documentState: document.readyState,
+      url: window.location.href
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-    return;
+
+    // First check for main content containers
+    let contentFound = false;
+    for (const selector of CONTENT_CONTAINER_SELECTORS) {
+      const container = document.querySelector(selector);
+      if (container) {
+        console.log('[Stats Extension] Found content container:', {
+          selector,
+          elementId: container.id,
+          elementClasses: Array.from(container.classList)
+        });
+        contentFound = true;
+        break;
+      }
+    }
+
+    // Then check for video cards
+    const cards = getAllVideoCards();
+    
+    if (cards.length > 0) {
+      console.log('[Stats Extension] Found video cards, processing');
+      processGlobalVideoCards();
+      return;
+    }
+    
+    if (contentFound) {
+      console.log('[Stats Extension] Content container found but no cards yet, continuing to monitor');
+      // Set up mutation observer to watch for cards being added
+      setupContentObserver();
+      return;
+    }
+
+    if (retryCount < maxRetries) {
+      retryCount++;
+      console.log('[Stats Extension] No content found, retrying', {
+        nextAttempt: retryCount + 1,
+        delayMs: retryInterval
+      });
+      setTimeout(checkForContent, retryInterval);
+    } else {
+      console.log('[Stats Extension] Content detection failed after all retries');
+    }
   }
 
-  initialize();
+  // Start the detection process
+  checkForContent();
+}
+
+function setupContentObserver() {
+  console.log('[Stats Extension] Setting up content observer for infinite scroll');
+  
+  let processingNodes = false;
+  const observer = new MutationObserver(async (mutations) => {
+    // Don't process if we're already processing
+    if (processingNodes) {
+      console.log('[Stats Extension] Already processing nodes, skipping this batch');
+      return;
+    }
+
+    processingNodes = true;
+    console.log('[Stats Extension] Processing mutation batch:', {
+      mutationCount: mutations.length,
+      timestamp: new Date().toISOString()
+    });
+
+    try {
+      let newCards = false;
+      let processedNodes = new Set();
+
+      for (const mutation of mutations) {
+        // Skip if we've already processed this node
+        if (processedNodes.has(mutation.target)) continue;
+        processedNodes.add(mutation.target);
+
+        // Check added nodes and their children for video cards
+        if (mutation.type === 'childList') {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== 1) continue; // Skip non-element nodes
+
+            // Check if the node itself is a video card
+            if (VIDEO_CARD_SELECTORS.some(selector => node.matches && node.matches(selector))) {
+              newCards = true;
+              break;
+            }
+
+            // Check children for video cards
+            if (node.querySelectorAll) {
+              for (const selector of VIDEO_CARD_SELECTORS) {
+                const cards = node.querySelectorAll(selector);
+                if (cards.length > 0) {
+                  newCards = true;
+                  break;
+                }
+              }
+            }
+
+            if (newCards) break;
+          }
+        }
+
+        if (newCards) break;
+      }
+
+      if (newCards) {
+        console.log('[Stats Extension] New video cards detected in mutation, processing');
+        await processVideoCards();
+      }
+    } finally {
+      processingNodes = false;
+    }
+  });
+
+  // Observe the entire document for changes
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: false, // Don't need attribute changes
+    characterData: false // Don't need text changes
+  });
+  
+  console.log('[Stats Extension] Infinite scroll observer setup complete');
 }
 
 // Add styles for grade overlays
@@ -359,136 +727,280 @@ function cleanupOverlays() {
     statsContainer.remove();
   }
 
-  // Only remove grade overlays if we're not on an index page
-  if (!isIndexPage()) {
-    console.log('[Stats Extension] Removing grade overlays');
+  // Only remove grade overlays if we're on a video page
+  if (isVideoPage()) {
+    console.log('[Stats Extension] Removing grade overlays on video page');
     document.querySelectorAll('.video-grade-overlay').forEach(overlay => {
       overlay.remove();
     });
   }
 }
 
-// Initialize the extension
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', safeInitialize);
-} else {
-  safeInitialize();
-}
-
 // Listen for page updates (for single-page applications)
+let navigationTimeout = null;
 new MutationObserver((mutations) => {
   const newUrl = window.location.href;
   if (currentPageUrl !== newUrl) {
     console.log('[Stats Extension] URL changed from', currentPageUrl, 'to', newUrl);
     currentPageUrl = newUrl;
-    cleanupOverlays();
-    safeInitialize();
+    
+    // Clear any pending navigation timeout
+    if (navigationTimeout) {
+      clearTimeout(navigationTimeout);
+    }
+    
+    // Wait a short moment for the page to settle after navigation
+    navigationTimeout = setTimeout(() => {
+      cleanupOverlays();
+      initialize();
+    }, 500);
   }
 }).observe(document.documentElement, { 
   subtree: true, 
   childList: true 
 });
 
-// Process video cards on the index page
-async function processVideoCards() {
-  console.log('[Stats Extension] Processing video cards on index page');
+// Modify processGlobalVideoCards to be more verbose
+async function processGlobalVideoCards() {
+  console.log('[Stats Extension] Starting global video card processing');
   
-  // Wait a short moment for dynamic content to load
+  // Initial delay to allow for dynamic content
   await new Promise(resolve => setTimeout(resolve, 1000));
+  console.log('[Stats Extension] Initial delay complete, proceeding with card detection');
   
-  // Find all video cards
-  const videoCards = document.querySelectorAll('[data-test-component="VideoThumbnailContainer"]');
-  console.log('[Stats Extension] Found video cards:', videoCards.length);
-
-  // Create a batch of URLs to process
-  const cardMap = new Map();
-  const urlsToFetch = [];
-  const cachedCards = new Map();
-
-  for (const card of videoCards) {
-    // Find the title link using the href pattern
-    const links = Array.from(card.getElementsByTagName('a'));
-    const titleLink = links.find(link => link.href && link.href.includes('/videos/'));
+  // Set up mutation observer for dynamic content
+  const contentObserver = new MutationObserver(debounce(async (mutations) => {
+    let newCards = false;
+    let newCardCount = 0;
     
-    if (!titleLink) {
-      console.log('[Stats Extension] No title link found for card');
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList') {
+        // Check both added nodes and their children for video cards
+        const addedNodes = Array.from(mutation.addedNodes);
+        const cards = addedNodes.filter(node => {
+          if (node.nodeType !== 1) return false; // Only element nodes
+          
+          // Check if the node itself is a video card
+          if (VIDEO_CARD_SELECTORS.some(selector => node.matches && node.matches(selector))) {
+            newCardCount++;
+            return true;
+          }
+          
+          // Check if the node contains video cards
+          if (node.querySelectorAll) {
+            for (const selector of VIDEO_CARD_SELECTORS) {
+              const foundCards = node.querySelectorAll(selector);
+              if (foundCards.length > 0) {
+                newCardCount += foundCards.length;
+                return true;
+              }
+            }
+          }
+          
+          return false;
+        });
+          
+        if (cards.length > 0) {
+          newCards = true;
+          console.log('[Stats Extension] New video cards detected:', newCardCount);
+        }
+      }
+    }
+    
+    if (newCards) {
+      console.log('[Stats Extension] Processing newly detected cards');
+      await processVideoCards();
+    }
+  }, 500)); // Debounce for 500ms
+
+  // Start observing the document with the configured parameters
+  contentObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+  
+  console.log('[Stats Extension] Set up mutation observer for dynamic content');
+  
+  // Initial processing of cards
+  await processVideoCards();
+}
+
+// Debounce helper function
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Modify processVideoCards to use batch caching
+async function processVideoCards() {
+  const startTime = performance.now();
+  const videoCards = getAllVideoCards();
+  console.log('[Stats Extension] Processing video cards:', {
+    cardCount: videoCards.length,
+    timestamp: new Date().toISOString()
+  });
+
+  const cardMap = new Map();
+  const urlsToProcess = [];
+  let processedCount = 0;
+
+  // Collect all URLs first
+  for (const card of videoCards) {
+    // Skip if already processed
+    if (card.hasAttribute('data-stats-processed')) {
+      processedCount++;
       continue;
     }
 
-    // Get the video URL
-    const videoUrl = titleLink.href;
-    console.log('[Stats Extension] Found video URL:', videoUrl);
+    // Skip if already has overlay
+    if (card.querySelector('.video-grade-overlay')) {
+      processedCount++;
+      continue;
+    }
 
-    // Check cache first
-    const cachedData = await getCachedData(videoUrl);
-    if (cachedData) {
-      // Use cached data immediately
-      cachedCards.set(videoUrl, { card, data: cachedData });
-    } else {
-      // Add to batch for fetching
-      urlsToFetch.push(videoUrl);
+    const videoUrl = await extractVideoUrl(card);
+    if (videoUrl) {
+      urlsToProcess.push(videoUrl);
       cardMap.set(videoUrl, card);
+      // Mark as processed
+      card.setAttribute('data-stats-processed', 'true');
     }
   }
 
-  // Process cached cards immediately
-  for (const [url, { card, data }] of cachedCards) {
-    const gradeOverlay = createGradeOverlay(data.grade, data.is_future_release);
-    await addOverlayToCard(card, gradeOverlay);
-  }
+  console.log('[Stats Extension] URL collection complete:', {
+    totalCards: videoCards.length,
+    alreadyProcessed: processedCount,
+    newUrlsToProcess: urlsToProcess.length,
+    timeElapsed: performance.now() - startTime
+  });
 
-  if (urlsToFetch.length === 0) {
-    console.log('[Stats Extension] No URLs to fetch, all data from cache');
+  if (urlsToProcess.length === 0) {
+    console.log('[Stats Extension] No new cards to process');
     return;
   }
 
-  try {
-    // Request stats for uncached videos in batch
-    console.log('[Stats Extension] Requesting batch data for URLs:', urlsToFetch);
-    const response = await chrome.runtime.sendMessage({
-      type: 'GET_SHEET_DATA',
-      urls: urlsToFetch
-    });
+  // Check cache in batch
+  const { cacheHits, cacheMisses } = await batchGetCachedData(urlsToProcess);
 
-    console.log('[Stats Extension] Got batch response:', response);
-
-    if (!response.success) {
-      console.error('[Stats Extension] Batch request failed:', response.error);
-      return;
-    }
-
-    // Process each result
-    for (const [url, result] of Object.entries(response.results)) {
-      const card = cardMap.get(url);
-      if (!card) {
-        console.log('[Stats Extension] No card found for URL:', url);
-        continue;
-      }
-
-      if (result.success && result.data) {
-        // Cache the new data
-        await setCachedData(url, result.data);
-      }
-
-      // Create and add grade overlay
-      const grade = result.success && result.data ? result.data.grade_model_16 : 'No Data';
-      const isFutureRelease = result.success && result.data && result.data.is_future_release;
-      
-      console.log('[Stats Extension] Creating grade overlay:', {
-        url,
-        grade,
-        isFutureRelease,
-        data: result.success ? result.data : null,
-        success: result.success,
-        error: result.error
-      });
-      
-      const gradeOverlay = createGradeOverlay(grade, isFutureRelease);
+  // Process cache hits immediately
+  for (const [url, data] of cacheHits) {
+    const card = cardMap.get(url);
+    if (card) {
+      const gradeOverlay = createGradeOverlay(data.grade, data.is_future_release);
       await addOverlayToCard(card, gradeOverlay);
     }
-  } catch (error) {
-    console.error('[Stats Extension] Error processing video cards:', error);
   }
+
+  // Fetch only uncached URLs
+  if (cacheMisses.length > 0) {
+    try {
+      console.log('[Stats Extension] Requesting batch data for uncached URLs:', {
+        count: cacheMisses.length,
+        urls: cacheMisses
+      });
+
+      const response = await chrome.runtime.sendMessage({
+        type: 'GET_SHEET_DATA',
+        urls: cacheMisses
+      });
+
+      if (response.success) {
+        // Cache all results
+        await batchSetCachedData(response.results);
+
+        // Process results
+        for (const [url, result] of Object.entries(response.results)) {
+          const card = cardMap.get(url);
+          if (!card) continue;
+
+          const grade = result.success && result.data ? result.data.grade_model_16 : 'No Data';
+          const isFutureRelease = result.success && result.data && result.data.is_future_release;
+          
+          const gradeOverlay = createGradeOverlay(grade, isFutureRelease);
+          await addOverlayToCard(card, gradeOverlay);
+        }
+      }
+    } catch (error) {
+      console.error('[Stats Extension] Error processing uncached cards:', error);
+    }
+  }
+
+  console.log('[Stats Extension] Card processing complete:', {
+    totalTime: performance.now() - startTime,
+    processedUrls: urlsToProcess.length,
+    cacheHits: cacheHits.size,
+    cacheMisses: cacheMisses.length
+  });
+}
+
+// Helper function to extract video URL from card
+async function extractVideoUrl(card) {
+  // Try different methods to find the video URL
+  let videoUrl = null;
+  let titleLink = null;
+
+  // Method 1: Direct video link
+  const links = Array.from(card.getElementsByTagName('a'));
+  titleLink = links.find(link => link.href && link.href.includes('/videos/'));
+
+  // Method 2: Check parent elements for video link
+  if (!titleLink) {
+    const parentLinks = Array.from(card.closest('a') || []);
+    if (parentLinks.length > 0 && parentLinks[0].href && parentLinks[0].href.includes('/videos/')) {
+      titleLink = parentLinks[0];
+    }
+  }
+
+  // Method 3: Look for data attributes
+  if (!titleLink) {
+    const dataUrl = card.getAttribute('data-video-url') || 
+                   card.getAttribute('data-href') || 
+                   card.getAttribute('data-link');
+    if (dataUrl && dataUrl.includes('/videos/')) {
+      videoUrl = new URL(dataUrl, window.location.origin).href;
+    }
+  }
+
+  // Method 4: Search in parent containers
+  if (!titleLink && !videoUrl) {
+    const container = card.closest('[data-video-url], [data-href], [data-link]');
+    if (container) {
+      const dataUrl = container.getAttribute('data-video-url') || 
+                     container.getAttribute('data-href') || 
+                     container.getAttribute('data-link');
+      if (dataUrl && dataUrl.includes('/videos/')) {
+        videoUrl = new URL(dataUrl, window.location.origin).href;
+      }
+    }
+  }
+
+  if (titleLink) {
+    videoUrl = titleLink.href;
+  }
+
+  if (!videoUrl) {
+    console.log('[Stats Extension] No video URL found for card:', {
+      cardHTML: card.outerHTML.substring(0, 200),
+      parentHTML: card.parentElement ? card.parentElement.outerHTML.substring(0, 200) : 'no parent',
+      dataAttrs: {
+        videoUrl: card.getAttribute('data-video-url'),
+        href: card.getAttribute('data-href'),
+        link: card.getAttribute('data-link')
+      },
+      foundLinks: links.map(l => l.href)
+    });
+    return null;
+  }
+
+  console.log('[Stats Extension] Found video URL:', videoUrl);
+  return videoUrl;
 }
 
 // Helper function to add overlay to card
@@ -625,7 +1137,7 @@ if (typeof module !== 'undefined' && module.exports) {
     isVideoPage,
     isIndexPage,
     initialize,
-    processVideoCards,
+    processGlobalVideoCards,
     safeInitialize,
     fetchVideoStats,
     showError,
