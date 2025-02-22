@@ -319,4 +319,167 @@ The test suite provides comprehensive coverage of page type detection functional
    - Index pages: Verify `processVideoCards` is called
    - Other pages: Verify no handlers are called
 
-Each test verifies both the functionality and logging output to ensure proper behavior and debugging capabilities. 
+Each test verifies both the functionality and logging output to ensure proper behavior and debugging capabilities.
+
+## Grade Display, Caching, and Navigation Improvements
+
+### Grade Color Coding
+
+1. **Color Scheme**
+   - A: Green (#4CAF50)
+   - B: Light Green (#8BC34A)
+   - C: Yellow (#FFC107)
+   - D: Orange (#FF9800)
+   - F: Red (#F44336)
+
+2. **Implementation**
+   ```javascript
+   const GRADE_COLORS = {
+     'A': '#4CAF50',
+     'B': '#8BC34A',
+     'C': '#FFC107',
+     'D': '#FF9800',
+     'F': '#F44336'
+   };
+   ```
+
+3. **Display Rules**
+   - Apply colors to both background and text for optimal visibility
+   - Maintain consistent opacity (0.9) for all grades
+   - Use white text for darker backgrounds (green, red)
+   - Use dark text for lighter backgrounds (yellow)
+
+### Grade Caching System
+
+1. **Cache Structure**
+   ```javascript
+   {
+     videoId: {
+       grade: string,
+       score: string,
+       timestamp: number
+     }
+   }
+   ```
+
+2. **Caching Rules**
+   - Cache only grade and model_16 score (static metrics)
+   - Store in chrome.storage.local
+   - Include timestamp for potential future cache invalidation
+   - Do not cache any other metrics (views, ratings, etc.)
+
+3. **Cache Operations**
+   - Write: After fetching new video data
+   - Read: Before making API requests
+   - Lookup: Use video URL as key
+   - Batch: Support batch operations for index pages
+
+4. **Example Implementation**
+   ```javascript
+   // Cache write
+   await chrome.storage.local.set({
+     ['grade_cache_' + videoId]: {
+       grade: data.grade_model_16,
+       score: data.score_model_16,
+       timestamp: Date.now()
+     }
+   });
+
+   // Cache read
+   const cacheKey = 'grade_cache_' + videoId;
+   const cache = await chrome.storage.local.get(cacheKey);
+   if (cache[cacheKey]) {
+     return cache[cacheKey];
+   }
+   ```
+
+### Navigation Improvements
+
+1. **Overlay Management**
+   - Track active overlays using unique identifiers
+   - Remove overlays when navigating away from video pages
+   - Maintain separate overlay systems for video and index pages
+
+2. **Cleanup Process**
+   ```javascript
+   function cleanupOverlays() {
+     // Remove video page stats overlay
+     const statsContainer = document.getElementById('video-stats-container');
+     if (statsContainer) {
+       statsContainer.remove();
+     }
+
+     // Keep index page grade overlays if on index page
+     if (!isIndexPage()) {
+       document.querySelectorAll('.video-grade-overlay').forEach(overlay => {
+         overlay.remove();
+       });
+     }
+   }
+   ```
+
+3. **Navigation Detection**
+   - Use URL change detection
+   - Clean up overlays before initializing new page
+   - Handle browser back/forward navigation
+   - Support single-page application navigation
+
+4. **Implementation**
+   ```javascript
+   // Current page tracking
+   let currentPageUrl = window.location.href;
+
+   // Navigation observer
+   new MutationObserver((mutations) => {
+     const newUrl = window.location.href;
+     if (currentPageUrl !== newUrl) {
+       currentPageUrl = newUrl;
+       cleanupOverlays();
+       safeInitialize();
+     }
+   }).observe(document.documentElement, { 
+     subtree: true, 
+     childList: true 
+   });
+   ```
+
+### Performance Considerations
+
+1. **Caching Benefits**
+   - Reduced API calls to Google Sheets
+   - Faster grade display on index pages
+   - Lower bandwidth usage
+   - Improved user experience
+
+2. **Memory Management**
+   - Regular cleanup of old overlays
+   - Efficient cache storage structure
+   - Proper garbage collection
+
+3. **Navigation Optimization**
+   - Clean removal of old elements
+   - Smooth transition between pages
+   - No flickering or visual artifacts
+   - Proper event cleanup
+
+### Testing Requirements
+
+1. **Grade Colors**
+   - Verify correct color mapping for each grade
+   - Test color contrast for accessibility
+   - Validate color consistency across browsers
+
+2. **Cache System**
+   - Test cache write/read operations
+   - Verify cache hit/miss scenarios
+   - Test batch operations
+   - Validate cache structure
+
+3. **Navigation**
+   - Test all navigation patterns:
+     - Direct URL access
+     - Browser back/forward
+     - Internal link navigation
+     - Single-page app navigation
+   - Verify cleanup of old overlays
+   - Test overlay persistence when appropriate 
