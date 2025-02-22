@@ -386,37 +386,69 @@ async function processVideoCards() {
 
       // Create and add grade overlay
       const grade = result.success && result.data ? result.data.grade_model_16 : 'No Data';
-      const gradeOverlay = createGradeOverlay(grade, result.success && result.data && result.data.is_future_release);
+      const isFutureRelease = result.success && result.data && result.data.is_future_release;
       
-      // Find the thumbnail preview div
-      const thumbnailPreview = card.querySelector('[data-test-component="VideoThumbnailPreview"]');
-      console.log('[Stats Extension] Processing card:', {
-        url: url,
-        found_thumbnail: !!thumbnailPreview,
-        grade: grade,
+      console.log('[Stats Extension] Creating grade overlay:', {
+        url,
+        grade,
+        isFutureRelease,
+        data: result.success ? result.data : null,
         success: result.success,
         error: result.error
       });
-
-      if (thumbnailPreview) {
-        // Make sure the container is positioned relatively
-        thumbnailPreview.style.position = 'relative';
-        
-        // Remove any existing overlay
-        const existingOverlay = thumbnailPreview.querySelector('.video-grade-overlay');
-        if (existingOverlay) {
-          existingOverlay.remove();
-        }
-
-        // Add the new overlay
-        thumbnailPreview.appendChild(gradeOverlay);
-        console.log('[Stats Extension] Successfully added grade overlay for:', url);
-      } else {
+      
+      const gradeOverlay = createGradeOverlay(grade, isFutureRelease);
+      
+      // Find the thumbnail preview div
+      const thumbnailPreview = card.querySelector('[data-test-component="VideoThumbnailPreview"]');
+      if (!thumbnailPreview) {
         console.log('[Stats Extension] No thumbnail preview found for card:', {
           url: url,
           cardHTML: card.outerHTML.substring(0, 200) // First 200 chars for brevity
         });
+        
+        // Try alternative selector
+        const altThumbnail = card.querySelector('[data-test-component="ProgressiveImage"]');
+        if (altThumbnail) {
+          console.log('[Stats Extension] Found alternative thumbnail container');
+          altThumbnail.style.position = 'relative';
+          
+          // Remove any existing overlay
+          const existingOverlay = altThumbnail.querySelector('.video-grade-overlay');
+          if (existingOverlay) {
+            existingOverlay.remove();
+          }
+
+          // Add the new overlay
+          altThumbnail.appendChild(gradeOverlay);
+          console.log('[Stats Extension] Successfully added grade overlay to alternative container:', {
+            grade,
+            backgroundColor: gradeOverlay.style.background,
+            textColor: gradeOverlay.style.color
+          });
+          continue;
+        }
+        continue;
       }
+
+      console.log('[Stats Extension] Found thumbnail preview, applying styles');
+      // Make sure the container is positioned relatively
+      thumbnailPreview.style.position = 'relative';
+      
+      // Remove any existing overlay
+      const existingOverlay = thumbnailPreview.querySelector('.video-grade-overlay');
+      if (existingOverlay) {
+        existingOverlay.remove();
+      }
+
+      // Add the new overlay
+      thumbnailPreview.appendChild(gradeOverlay);
+      console.log('[Stats Extension] Successfully added grade overlay:', {
+        url,
+        grade,
+        backgroundColor: gradeOverlay.style.background,
+        textColor: gradeOverlay.style.color
+      });
     }
   } catch (error) {
     console.error('[Stats Extension] Error processing video cards:', error);
@@ -432,21 +464,59 @@ function createGradeOverlay(grade, isFutureRelease = false) {
   let backgroundColor = 'rgba(0, 0, 0, 0.85)';
   let textColor = 'white';
   
-  if (grade === 'No Data') {
-    backgroundColor = 'rgba(128, 128, 128, 0.85)';
-  } else if (grade === 'Error') {
-    backgroundColor = 'rgba(255, 82, 82, 0.85)';
-  } else if (grade === 'Unreleased') {
+  // Trim the grade to remove any extra spaces
+  const cleanGrade = grade ? grade.trim() : grade;
+  
+  if (isFutureRelease) {
     backgroundColor = 'rgba(33, 150, 243, 0.85)'; // Blue for unreleased
+  } else if (cleanGrade === 'No Data') {
+    backgroundColor = 'rgba(128, 128, 128, 0.85)';
+  } else if (cleanGrade === 'Error') {
+    backgroundColor = 'rgba(255, 82, 82, 0.85)';
+  } else {
+    // Color coding for grades
+    switch (cleanGrade) {
+      case 'A':
+        backgroundColor = 'rgba(46, 125, 50, 0.85)'; // Darker, more vibrant green
+        break;
+      case 'B':
+        backgroundColor = 'rgba(156, 204, 101, 0.85)'; // Lighter, more distinct green
+        break;
+      case 'C':
+        backgroundColor = 'rgba(255, 193, 7, 0.85)'; // Yellow
+        textColor = '#000'; // Dark text for better contrast
+        break;
+      case 'D':
+        backgroundColor = 'rgba(255, 152, 0, 0.85)'; // Orange
+        break;
+      case 'E':
+      case 'F':
+        backgroundColor = 'rgba(244, 67, 54, 0.85)'; // Red
+        break;
+      default:
+        console.log('[Stats Extension] Unhandled grade value:', {
+          original: grade,
+          cleaned: cleanGrade
+        });
+        break;
+    }
   }
 
-  overlay.innerHTML = grade === 'Unreleased' ? 'Coming Soon' : `Grade: ${grade}`;
+  console.log('[Stats Extension] Creating overlay with styles:', {
+    originalGrade: grade,
+    cleanedGrade: cleanGrade,
+    isFutureRelease,
+    backgroundColor,
+    textColor
+  });
+
+  overlay.innerHTML = cleanGrade === 'Unreleased' ? 'Coming Soon' : `Grade: ${cleanGrade}`;
   overlay.style.cssText = `
     position: absolute;
     top: 10px;
     left: 10px;
-    background: ${backgroundColor};
-    color: ${textColor};
+    background: ${backgroundColor} !important;
+    color: ${textColor} !important;
     padding: 6px 12px;
     border-radius: 4px;
     font-size: 13px;

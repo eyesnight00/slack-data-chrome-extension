@@ -54,4 +54,24 @@
 ### Removed
 - Redundant URL processing tests
 - Unused test dependencies
-- Legacy test configurations 
+- Legacy test configurations
+
+## [Unreleased]
+### Added
+- Implemented color-coded grade display on index pages
+  - Dark green for A grades
+  - Light green for B grades
+  - Yellow for C grades (with dark text)
+  - Orange for D grades
+  - Red for E and F grades
+  - Blue for unreleased videos
+  - Gray for videos with no data
+### Planned Changes
+- Implement grade and score caching system
+  - Cache static metrics (grade and model_16 score)
+  - Improve performance on index pages
+  - Reduce API calls to Google Sheets
+- Fix navigation overlay issues
+  - Properly cleanup overlays when navigating between pages
+  - Maintain correct overlay state during navigation
+  - Handle single-page application navigation 
