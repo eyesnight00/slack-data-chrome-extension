@@ -12,43 +12,76 @@ describe('Global Video Card Detection', () => {
     document.body.innerHTML = '';
   });
 
-  describe('Page Detection', () => {
-    test('should detect pages with video cards', () => {
-      // Test implementation coming soon
+  describe('Basic Video Card Detection', () => {
+    test('should detect VideoThumbnailContainer', () => {
+      document.body.innerHTML = `
+        <div id="content">
+          <div data-test-component="VideoThumbnailContainer">
+            <img src="example.jpg" />
+          </div>
+        </div>
+      `;
+      expect(isPageWithVideoCards()).toBe(true);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[Stats Extension] Found video cards using selector:')
+      );
     });
 
-    test('should handle pages without video cards', () => {
-      // Test implementation coming soon
-    });
-  });
-
-  describe('Card Processing', () => {
-    test('should process video cards across different layouts', () => {
-      // Test implementation coming soon
-    });
-
-    test('should handle dynamic content loading', () => {
-      // Test implementation coming soon
-    });
-  });
-
-  describe('Grade Display', () => {
-    test('should maintain consistent overlay positioning', () => {
-      // Test implementation coming soon
+    test('should detect VideoThumbnailPreview', () => {
+      document.body.innerHTML = `
+        <div id="content">
+          <div data-test-component="VideoThumbnailPreview">
+            <img src="example.jpg" />
+          </div>
+        </div>
+      `;
+      expect(isPageWithVideoCards()).toBe(true);
     });
 
-    test('should handle different thumbnail sizes', () => {
-      // Test implementation coming soon
+    test('should detect ProgressiveImage', () => {
+      document.body.innerHTML = `
+        <div id="content">
+          <div data-test-component="ProgressiveImage">
+            <img src="example.jpg" />
+          </div>
+        </div>
+      `;
+      expect(isPageWithVideoCards()).toBe(true);
     });
-  });
 
-  describe('Performance', () => {
-    test('should implement lazy loading', () => {
-      // Test implementation coming soon
+    test('should return false when no video cards present', () => {
+      document.body.innerHTML = `
+        <div id="content">
+          <div class="other-content">
+            <img src="example.jpg" />
+          </div>
+        </div>
+      `;
+      expect(isPageWithVideoCards()).toBe(false);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Stats Extension] No video cards found on page'
+      );
     });
 
-    test('should batch process cards in viewport', () => {
-      // Test implementation coming soon
+    test('should count number of video cards found', () => {
+      document.body.innerHTML = `
+        <div id="content">
+          <div data-test-component="VideoThumbnailContainer">
+            <img src="example1.jpg" />
+          </div>
+          <div data-test-component="VideoThumbnailPreview">
+            <img src="example2.jpg" />
+          </div>
+          <div data-test-component="ProgressiveImage">
+            <img src="example3.jpg" />
+          </div>
+        </div>
+      `;
+      const result = getVideoCardCount();
+      expect(result).toBe(3);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[Stats Extension] Found 3 video cards on page'
+      );
     });
   });
 });
