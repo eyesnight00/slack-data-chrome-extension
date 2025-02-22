@@ -1,0 +1,24 @@
+{
+  "name": "video-stats-extension",
+  "version": "2.0.0",
+  "description": "Chrome extension for displaying video statistics",
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "babel-jest": "^29.7.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "transform": {
+      "^.+\\.js$": "babel-jest"
+    },
+    "setupFiles": [],
+    "testMatch": ["**/tests/**/*.test.js"],
+    "verbose": true
+  }
+} 

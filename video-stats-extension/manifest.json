@@ -39,8 +39,7 @@
   },
 
   "background": {
-    "service_worker": "src/background.js",
-    "type": "module"
+    "service_worker": "src/background.js"
   },
 
   "content_scripts": [{
@@ -56,8 +55,7 @@
       "https://members.vixenplus.com/*", "https://www.vixenplus.com/*"
     ],
     "js": ["src/content.js"],
-    "type": "module",
-    "run_at": "document_end"
+    "run_at": "document_idle"
   }],
 
   "web_accessible_resources": [{

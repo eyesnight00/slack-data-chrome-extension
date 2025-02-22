@@ -95,18 +95,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 function getVideoTitle(url) {
   try {
     const urlObj = new URL(url);
-    const pathParts = urlObj.pathname.split('/');
-    const videoIndex = pathParts.indexOf('videos');
-    if (videoIndex !== -1 && videoIndex < pathParts.length - 1) {
-      const title = pathParts[videoIndex + 1];
-      console.log('[Stats Extension] Successfully extracted title from URL:', title);
-      return title;
+    const pathParts = urlObj.pathname.split('/').filter(Boolean);
+    
+    // Skip channel videos
+    if (pathParts[0] === 'channels') {
+      return null;
     }
-    return null;
+    
+    // Find the index of 'videos' in the path
+    const videoIndex = pathParts.indexOf('videos');
+    if (videoIndex === -1) return null;
+    
+    // Get the last part after 'videos', regardless of path structure
+    const videoSlug = pathParts[pathParts.length - 1];
+    console.log('[Stats Extension] Extracted video slug:', {
+      url,
+      pathParts,
+      videoIndex,
+      videoSlug,
+      normalized: normalizeString(videoSlug)
+    });
+    return videoSlug;
   } catch (error) {
     console.error('[Stats Extension] Error parsing URL:', error);
     // Try direct path extraction if URL parsing fails
-    const matches = url.match(/\/videos\/([^/?#]+)/);
+    const matches = url.match(/\/videos\/(?:[^/]+\/)*([^/?#]+)/);
     if (matches && matches[1]) {
       console.log('[Stats Extension] Extracted title using regex:', matches[1]);
       return matches[1];
@@ -118,11 +131,84 @@ function getVideoTitle(url) {
 // Function to normalize a string for comparison
 function normalizeString(str) {
   if (!str) return '';
-  const normalized = str.toLowerCase()
+  return str.toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  console.log('[Stats Extension] Normalized string:', str, 'to:', normalized);
-  return normalized;
+    .replace(/^-+|-+$/g, '')
+    .replace(/^videos-/, '') // Remove 'videos-' prefix if present
+    .replace(/-in-.*?-debut$/, '') // Remove "-in-*-debut" suffix
+    .replace(/-debut$/, '') // Remove "-debut" suffix
+    .replace(/-and-/g, '-') // Normalize "and" to just hyphen
+    .replace(/-a-/g, '-') // Normalize "a" to just hyphen
+    .replace(/-the-/g, '-') // Normalize "the" to just hyphen
+    .replace(/-with-/g, '-'); // Normalize "with" to just hyphen
+}
+
+// Function to normalize a title for comparison
+function normalizeTitle(title) {
+  if (!title) return '';
+  return title.toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-in-.*?-debut$/, '') // Remove "-in-*-debut" suffix
+    .replace(/-debut$/, ''); // Remove "-debut" suffix
+}
+
+// Function to check if two titles might refer to the same video
+function titlesMightMatch(title1, title2) {
+  if (!title1 || !title2) return false;
+  
+  const norm1 = normalizeTitle(title1);
+  const norm2 = normalizeTitle(title2);
+  
+  console.log('[Stats Extension] Comparing titles:', {
+    title1, title2,
+    norm1, norm2
+  });
+  
+  // Direct match
+  if (norm1 === norm2) return true;
+  
+  // Convert URL-style title to readable title
+  const readable1 = norm1.replace(/-/g, ' ');
+  const readable2 = norm2.replace(/-/g, ' ');
+  
+  // Check if one contains the other
+  if (readable1.includes(readable2) || readable2.includes(readable1)) {
+    console.log('[Stats Extension] Found partial match:', { readable1, readable2 });
+    return true;
+  }
+  
+  // Remove common words and check again
+  const clean1 = readable1.replace(/\b(gets|her|in|the|a|an)\b/g, '').replace(/\s+/g, ' ').trim();
+  const clean2 = readable2.replace(/\b(gets|her|in|the|a|an)\b/g, '').replace(/\s+/g, ' ').trim();
+  
+  if (clean1 === clean2) {
+    console.log('[Stats Extension] Found match after cleaning:', { clean1, clean2 });
+    return true;
+  }
+  
+  return false;
+}
+
+// Function to check if two URLs refer to the same video
+function isSameVideo(url1, url2) {
+  const title1 = getVideoTitle(url1);
+  const title2 = getVideoTitle(url2);
+  
+  if (!title1 || !title2) return false;
+  
+  const norm1 = normalizeString(title1);
+  const norm2 = normalizeString(title2);
+  
+  console.log('[Stats Extension] Comparing video slugs:', {
+    url1, url2,
+    title1, title2,
+    norm1, norm2,
+    match: norm1 === norm2
+  });
+  
+  return norm1 === norm2;
 }
 
 // Function to fetch data from Google Sheets
@@ -157,13 +243,12 @@ async function fetchSheetData(videoUrl) {
     if (domain === 'vixenplus.com') {
       console.log('[Stats Extension] Processing vixenplus.com URL, searching all sheets');
 
-      // Extract and normalize the video title from the input URL first
-      const videoTitle = getVideoTitle(videoUrl);
-      if (!videoTitle) {
+      // Extract video slug from the input URL
+      const videoSlug = getVideoTitle(videoUrl);
+      if (!videoSlug) {
         throw new Error('Invalid video URL format');
       }
-      const normalizedVideoTitle = normalizeString(videoTitle);
-      console.log('[Stats Extension] Looking for normalized video title:', normalizedVideoTitle);
+      console.log('[Stats Extension] Looking for video slug:', videoSlug);
 
       const allSheetRequests = ALL_SHEETS.map(sheet => {
         console.log('[Stats Extension] Fetching sheet:', sheet);
@@ -194,25 +279,11 @@ async function fetchSheetData(videoUrl) {
 
         console.log(`[Stats Extension] Searching in sheet: ${ALL_SHEETS[i]}, found ${data.values.length} rows`);
         
-        // Search for matching video title in URLs
+        // Search for matching video slug in URLs
         const matchingRow = data.values.find(row => {
-          if (!row[COLUMN_INDICES.URL]) {
-            return false;
-          }
-          
-          const rowVideoTitle = getVideoTitle(row[COLUMN_INDICES.URL]);
-          if (!rowVideoTitle) {
-            return false;
-          }
-          
-          const normalizedRowTitle = normalizeString(rowVideoTitle);
-          console.log(`[Stats Extension] Comparing titles - Input: ${normalizedVideoTitle}, Sheet: ${normalizedRowTitle}`);
-          
-          if (normalizedVideoTitle === normalizedRowTitle) {
-            console.log(`[Stats Extension] Found exact match in ${ALL_SHEETS[i]}:`, row[COLUMN_INDICES.URL]);
-            return true;
-          }
-          return false;
+          if (!row[COLUMN_INDICES.URL]) return false;
+          const rowSlug = getVideoTitle(row[COLUMN_INDICES.URL]);
+          return rowSlug === videoSlug;
         });
 
         if (matchingRow) {
@@ -221,7 +292,7 @@ async function fetchSheetData(videoUrl) {
         }
       }
 
-      throw new Error(`Video not found in any sheet. Searched for title: ${normalizedVideoTitle}`);
+      throw new Error(`Video not found in any sheet. Searched for slug: ${videoSlug}`);
     } else {
       // Normal flow for other domains
       const sheetName = SITE_MAPPINGS[domain];
@@ -256,20 +327,8 @@ async function fetchSheetData(videoUrl) {
 
       // Search for matching video title
       const matchingRow = data.values.find(row => {
-        if (!row[COLUMN_INDICES.URL]) {
-          console.log('[Stats Extension] Row has no URL:', row);
-          return false;
-        }
-        
-        const rowVideoTitle = getVideoTitle(row[COLUMN_INDICES.URL]);
-        if (!rowVideoTitle) {
-          console.log('[Stats Extension] Could not extract title from row URL:', row[COLUMN_INDICES.URL]);
-          return false;
-        }
-        
-        const normalizedRowTitle = normalizeString(rowVideoTitle);
-        console.log(`[Stats Extension] Comparing titles - Current: ${normalizedVideoTitle}, Row: ${normalizedRowTitle}`);
-        return normalizedVideoTitle === normalizedRowTitle;
+        if (!row[COLUMN_INDICES.URL]) return false;
+        return isSameVideo(videoUrl, row[COLUMN_INDICES.URL]);
       });
 
       if (!matchingRow) {
@@ -288,6 +347,11 @@ async function fetchSheetData(videoUrl) {
 // Process matching row into stats object
 function processMatchingRow(row) {
   console.log('[Stats Extension] Processing row:', row);
+  
+  // Check if this is a future release
+  const releaseDate = new Date(row[COLUMN_INDICES.RELEASE_DATE]);
+  const isFutureRelease = releaseDate > new Date();
+  
   const stats = {
     content_id: row[COLUMN_INDICES.CONTENT_ID],
     title: row[COLUMN_INDICES.TITLE],
@@ -305,10 +369,20 @@ function processMatchingRow(row) {
     rating: parseFloat(row[COLUMN_INDICES.RATING]) || 0,
     favorites: parseInt(row[COLUMN_INDICES.FAVORITES]) || 0,
     trial_unlocks: parseInt(row[COLUMN_INDICES.TRIAL_UNLOCKS]) || 0,
-    score_model_16: row[COLUMN_INDICES.SCORE_MODEL_16] || 'N/A',
-    grade_model_16: row[COLUMN_INDICES.GRADE_MODEL_16] || 'N/A'
+    score_model_16: isFutureRelease ? 'Unreleased' : (row[COLUMN_INDICES.SCORE_MODEL_16] || 'N/A'),
+    grade_model_16: isFutureRelease ? 'Unreleased' : (row[COLUMN_INDICES.GRADE_MODEL_16] || 'N/A'),
+    is_future_release: isFutureRelease
   };
-  console.log('[Stats Extension] Processed stats:', stats);
+  
+  console.log('[Stats Extension] Processed stats:', {
+    ...stats,
+    future_release_check: {
+      release_date: releaseDate,
+      current_date: new Date(),
+      is_future: isFutureRelease
+    }
+  });
+  
   return stats;
 }
 
@@ -352,9 +426,20 @@ async function processBatchUrls(urls) {
         // Process each URL against all sheets
         for (const url of domainUrls) {
           const videoTitle = getVideoTitle(url);
-          if (!videoTitle) continue;
+          if (!videoTitle) {
+            results[url] = {
+              success: false,
+              error: 'Invalid video URL format'
+            };
+            continue;
+          }
           
-          const normalizedVideoTitle = normalizeString(videoTitle);
+          console.log('[Stats Extension] Processing batch URL:', {
+            url,
+            videoTitle,
+            normalized: normalizeString(videoTitle)
+          });
+          
           let found = false;
 
           // Search through all sheets
@@ -362,14 +447,19 @@ async function processBatchUrls(urls) {
             const data = allSheetsData[i];
             if (!data || !data.values || data.values.length < 2) continue;
 
+            console.log(`[Stats Extension] Searching sheet ${ALL_SHEETS[i]} for video:`, videoTitle);
+
             const matchingRow = data.values.find(row => {
               if (!row[COLUMN_INDICES.URL]) return false;
-              const rowVideoTitle = getVideoTitle(row[COLUMN_INDICES.URL]);
-              if (!rowVideoTitle) return false;
-              return normalizeString(rowVideoTitle) === normalizedVideoTitle;
+              return isSameVideo(url, row[COLUMN_INDICES.URL]);
             });
 
             if (matchingRow) {
+              console.log(`[Stats Extension] Found match in sheet ${ALL_SHEETS[i]}:`, {
+                url,
+                videoTitle,
+                matchingUrl: matchingRow[COLUMN_INDICES.URL]
+              });
               results[url] = {
                 success: true,
                 data: processMatchingRow(matchingRow)
@@ -380,9 +470,14 @@ async function processBatchUrls(urls) {
           }
 
           if (!found) {
+            console.log('[Stats Extension] No match found for video:', {
+              url,
+              videoTitle,
+              normalized: normalizeString(videoTitle)
+            });
             results[url] = {
               success: false,
-              error: `Video not found in any sheet: ${normalizedVideoTitle}`
+              error: `Video not found in any sheet: ${videoTitle}`
             };
           }
         }
@@ -436,20 +531,33 @@ async function processBatchUrls(urls) {
             continue;
           }
 
-          const normalizedVideoTitle = normalizeString(videoTitle);
+          console.log('[Stats Extension] Processing batch URL:', {
+            url,
+            videoTitle,
+            normalized: normalizeString(videoTitle)
+          });
+
           const matchingRow = data.values.find(row => {
             if (!row[COLUMN_INDICES.URL]) return false;
-            const rowVideoTitle = getVideoTitle(row[COLUMN_INDICES.URL]);
-            if (!rowVideoTitle) return false;
-            return normalizeString(rowVideoTitle) === normalizedVideoTitle;
+            return isSameVideo(url, row[COLUMN_INDICES.URL]);
           });
 
           if (matchingRow) {
+            console.log('[Stats Extension] Found match:', {
+              url,
+              videoTitle,
+              matchingUrl: matchingRow[COLUMN_INDICES.URL]
+            });
             results[url] = {
               success: true,
               data: processMatchingRow(matchingRow)
             };
           } else {
+            console.log('[Stats Extension] No match found:', {
+              url,
+              videoTitle,
+              normalized: normalizeString(videoTitle)
+            });
             results[url] = {
               success: false,
               error: `Video not found in spreadsheet: ${videoTitle}`

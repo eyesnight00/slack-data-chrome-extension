@@ -137,7 +137,7 @@ function updateStatsDisplay(stats) {
 }
 
 // Fetch video statistics
-export async function fetchVideoStats() {
+async function fetchVideoStats() {
   console.log('[Stats Extension] Fetching video stats for URL:', window.location.href);
   
   try {
@@ -162,54 +162,76 @@ export async function fetchVideoStats() {
 }
 
 // Check if we're on a video page
-export function isVideoPage() {
+function isVideoPage() {
   const pathname = window.location.pathname;
-  const segments = pathname.split('/').filter(Boolean);
-  const isVideo = segments.length === 2 && segments[0] === 'videos';
+  const segments = pathname.split('/').filter(s => s.length > 0);
   
-  console.log('[Stats Extension] Checking page type:', {
+  const debug = {
     type: 'VIDEO PAGE CHECK',
-    pathname: pathname,
+    pathname,
     segments_before_filter: pathname.split('/'),
     segments_after_filter: segments,
     segment_count: segments.length,
-    first_segment: segments[0] || 'none',
-    second_segment: segments[1] || 'none',
-    is_video_page: isVideo,
-    reason: isVideo ? 
-      'Matches video page pattern: exactly two segments with first being "videos"' :
-      `Does not match video page pattern: ${segments.length !== 2 ? 'wrong number of segments' : 'first segment not "videos"'}`
-  });
-  
-  return isVideo;
+    first_segment: segments.length > 0 ? segments[0].toLowerCase() : 'none',
+    second_segment: segments.length > 1 ? segments[1] : 'none',
+    is_video_page: false,
+    reason: ''
+  };
+
+  // Check if we have exactly two segments and first is "videos"
+  const isValid = segments.length === 2 && 
+                 segments[0].toLowerCase() === 'videos' && 
+                 segments[1] !== 'category';  // Exclude category pages
+
+  debug.is_video_page = isValid;
+  debug.reason = isValid ? 
+    'Matches video page pattern: exactly two segments with first being "videos"' :
+    'Does not match video page pattern: ' + (
+      segments.length !== 2 ? 'wrong number of segments' :
+      segments[0].toLowerCase() !== 'videos' ? 'first segment not "videos"' :
+      'is a category page'
+    );
+
+  console.log('[Stats Extension] Checking page type:', debug);
+  return isValid;
 }
 
 // Check if we're on an index page
-export function isIndexPage() {
+function isIndexPage() {
   const pathname = window.location.pathname;
-  const segments = pathname.split('/').filter(Boolean);
-  const isIndex = segments.length === 1 && segments[0] === 'videos';
+  const segments = pathname.split('/').filter(s => s.length > 0);
+  const fullUrl = window.location.href;
   
-  console.log('[Stats Extension] Checking page type:', {
+  const debug = {
     type: 'INDEX PAGE CHECK',
-    pathname: pathname,
-    full_url: window.location.href,
+    pathname,
+    full_url: fullUrl,
     segments_before_filter: pathname.split('/'),
     segments_after_filter: segments,
     segment_count: segments.length,
-    first_segment: segments[0] || 'none',
+    first_segment: segments.length > 0 ? segments[0].toLowerCase() : 'none',
     has_query: window.location.search.length > 0,
-    is_index_page: isIndex,
-    reason: isIndex ? 
-      'Matches index page pattern: exactly one segment "videos"' :
-      `Does not match index page pattern: ${segments.length !== 1 ? 'wrong number of segments' : 'first segment not "videos"'}`
-  });
-  
-  return isIndex;
+    is_index_page: false,
+    reason: ''
+  };
+
+  // Check if we have exactly one segment and it is "videos"
+  const isValid = segments.length === 1 && segments[0].toLowerCase() === 'videos';
+
+  debug.is_index_page = isValid;
+  debug.reason = isValid ?
+    'Matches index page pattern: exactly one segment "videos"' :
+    'Does not match index page pattern: ' + (
+      segments.length !== 1 ? 'wrong number of segments' :
+      'first segment not "videos"'
+    );
+
+  console.log('[Stats Extension] Checking page type:', debug);
+  return isValid;
 }
 
 // Initialize when the page loads
-export function initialize() {
+function initialize() {
   console.log('[Stats Extension] Initializing on URL:', window.location.href);
   
   if (isVideoPage()) {
@@ -217,59 +239,93 @@ export function initialize() {
     fetchVideoStats();
   } else if (isIndexPage()) {
     console.log('[Stats Extension] Index page detected, processing video cards');
-    // Initial processing
     processVideoCards();
-    
-    // Set up observer for dynamically loaded cards
-    const contentObserver = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        if (mutation.addedNodes.length > 0) {
-          const hasNewCards = Array.from(mutation.addedNodes).some(node => {
-            return node.nodeType === 1 && (
-              node.classList?.contains('sc-1jdw134-0') ||
-              node.querySelector?.('.sc-1jdw134-0, [class*="VideoThumbnailContainer"]')
-            );
-          });
-          
-          if (hasNewCards) {
-            console.log('[Stats Extension] New video cards detected, processing...');
-            processVideoCards();
-          }
-        }
-      }
-    });
-    
-    // Start observing the main content area
-    contentObserver.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
   } else {
     console.log('[Stats Extension] Not a supported page type (not an index or video page)');
   }
 }
 
-// Start the extension
-safeInitialize();
+// Function to safely initialize
+function safeInitialize() {
+  console.log('[Stats Extension] Safe initialize called:', {
+    ready_state: document.readyState,
+    body_exists: !!document.body,
+    head_exists: !!document.head,
+    timestamp: new Date().toISOString(),
+    url: window.location.href,
+    pathname: window.location.pathname
+  });
+
+  // Wait for body to be available
+  if (!document.body) {
+    console.log('[Stats Extension] No body yet, waiting...');
+    const observer = new MutationObserver((mutations, obs) => {
+      if (document.body) {
+        console.log('[Stats Extension] Body now available');
+        obs.disconnect();
+        initialize();
+      }
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    return;
+  }
+
+  initialize();
+}
+
+// Add styles for grade overlays
+const style = document.createElement('style');
+style.textContent = `
+  .video-grade-overlay {
+    opacity: 0.9;
+    transition: opacity 0.2s ease;
+    font-family: Arial, sans-serif;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  .video-grade-overlay:hover {
+    opacity: 1;
+  }
+  [data-test-component="ProgressiveImage"] {
+    position: relative;
+  }
+`;
+
+// Add styles when head is available
+if (document.head) {
+  document.head.appendChild(style);
+} else {
+  // If head isn't available yet, wait for it
+  const observer = new MutationObserver((mutations, obs) => {
+    if (document.head) {
+      document.head.appendChild(style);
+      obs.disconnect();
+    }
+  });
+  observer.observe(document.documentElement, { childList: true });
+}
+
+// Initialize the extension
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', safeInitialize);
+} else {
+  safeInitialize();
+}
 
 // Listen for page updates (for single-page applications)
-new MutationObserver(() => {
+new MutationObserver((mutations) => {
   const newUrl = window.location.href;
   if (currentPageUrl !== newUrl) {
     console.log('[Stats Extension] URL changed from', currentPageUrl, 'to', newUrl);
     currentPageUrl = newUrl;
-    initialize();
+    safeInitialize();
   }
-}).observe(document.body, { subtree: true, childList: true });
-
-// Also listen for load event
-window.addEventListener('load', () => {
-  console.log('[Stats Extension] Window load event fired, reinitializing');
-  initialize();
+}).observe(document.documentElement, { 
+  subtree: true, 
+  childList: true 
 });
 
 // Process video cards on the index page
-export async function processVideoCards() {
+async function processVideoCards() {
   console.log('[Stats Extension] Processing video cards on index page');
   
   // Wait a short moment for dynamic content to load
@@ -407,53 +463,18 @@ function createGradeOverlay(grade, isFutureRelease = false) {
   return overlay;
 }
 
-// Function to safely initialize
-function safeInitialize() {
-  console.log('[Stats Extension] Safe initialize called:', {
-    ready_state: document.readyState,
-    body_exists: !!document.body,
-    head_exists: !!document.head,
-    timestamp: new Date().toISOString()
-  });
-  
-  if (document.readyState === 'loading') {
-    console.log('[Stats Extension] Document still loading, waiting for DOMContentLoaded');
-    document.addEventListener('DOMContentLoaded', () => {
-      console.log('[Stats Extension] DOMContentLoaded fired, initializing');
-      initialize();
-    });
-  } else {
-    console.log('[Stats Extension] Document already loaded, initializing immediately');
-    initialize();
-  }
-}
-
 // Export functions for testing
-export {
-  isVideoPage,
-  isIndexPage,
-  initialize,
-  fetchVideoStats,
-  processVideoCards
-};
-
-// Add styles for grade overlays
-const style = document.createElement('style');
-style.textContent = `
-  .video-grade-overlay {
-    opacity: 0.9;
-    transition: opacity 0.2s ease;
-    font-family: Arial, sans-serif;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-  .video-grade-overlay:hover {
-    opacity: 1;
-  }
-  [data-test-component="ProgressiveImage"] {
-    position: relative;
-  }
-`;
-document.head.appendChild(style); 
-document.head.appendChild(style); 
-document.head.appendChild(style); 
-document.head.appendChild(style); 
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    isVideoPage,
+    isIndexPage,
+    initialize,
+    processVideoCards,
+    safeInitialize,
+    fetchVideoStats,
+    showError,
+    createStatsContainer,
+    formatNumber,
+    formatDate
+  };
+} 
