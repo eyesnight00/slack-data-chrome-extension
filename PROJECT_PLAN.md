@@ -49,6 +49,17 @@ Last Updated: [Current Date]
 - [ ] Cache implementation for faster lookups
 - [ ] Performance metrics tracking
 - [ ] User preferences storage
+- [ ] Index page grade display
+  - [ ] Video card URL extraction
+  - [ ] Batch grade fetching
+  - [ ] Thumbnail overlay UI
+  - [ ] Performance optimization for multiple cards
+- [ ] Enhanced Logging System
+  - [ ] Structured log format
+  - [ ] Debug information capture
+  - [ ] Performance timing logs
+  - [ ] Error state tracking
+  - [ ] Initialization verification
 
 ### Planned 📋
 - [ ] Advanced error reporting
@@ -67,6 +78,8 @@ Last Updated: [Current Date]
 - [ ] Performance testing
   - [ ] Sheet data retrieval optimization
   - [ ] Content script load time analysis
+  - [ ] Log analysis and monitoring
+  - [ ] Initialization timing verification
 - [ ] Error handling validation
 - [ ] Domain-specific edge cases
 

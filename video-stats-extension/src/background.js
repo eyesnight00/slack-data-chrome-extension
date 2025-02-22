@@ -71,18 +71,23 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('[Stats Extension] Received message:', request);
+
   if (request.type === 'GET_SHEET_DATA') {
-    console.log('[Stats Extension] Received request for URL:', request.url);
-    fetchSheetData(request.url)
-      .then(data => {
-        console.log('[Stats Extension] Successfully fetched data:', data);
-        sendResponse({ success: true, data });
-      })
-      .catch(error => {
-        console.error('[Stats Extension] Error fetching data:', error);
-        sendResponse({ success: false, error: error.message });
-      });
-    return true; // Will respond asynchronously
+    // Single URL request
+    if (typeof request.url === 'string') {
+      fetchSheetData(request.url)
+        .then(data => sendResponse({ success: true, data }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+    }
+    // Batch URL request
+    else if (Array.isArray(request.urls)) {
+      processBatchUrls(request.urls)
+        .then(results => sendResponse({ success: true, results }))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true;
+    }
   }
 });
 
@@ -305,4 +310,164 @@ function processMatchingRow(row) {
   };
   console.log('[Stats Extension] Processed stats:', stats);
   return stats;
+}
+
+// Process a batch of video URLs
+async function processBatchUrls(urls) {
+  console.log('[Stats Extension] Processing batch of URLs:', urls);
+  
+  try {
+    // Group URLs by domain
+    const urlsByDomain = {};
+    for (const url of urls) {
+      try {
+        const domain = new URL(url).hostname.replace('www.', '').replace('members.', '');
+        if (!urlsByDomain[domain]) {
+          urlsByDomain[domain] = [];
+        }
+        urlsByDomain[domain].push(url);
+      } catch (error) {
+        console.error('[Stats Extension] Error parsing URL:', url, error);
+      }
+    }
+
+    // Process each domain's URLs
+    const results = {};
+    for (const [domain, domainUrls] of Object.entries(urlsByDomain)) {
+      // For vixenplus.com, we need to search all sheets
+      if (domain === 'vixenplus.com') {
+        // Fetch all sheets once
+        const allSheetRequests = ALL_SHEETS.map(sheet => {
+          console.log('[Stats Extension] Fetching sheet:', sheet);
+          return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${sheet}?key=${API_KEY}`)
+            .then(response => response.ok ? response.json() : null)
+            .catch(error => {
+              console.error(`[Stats Extension] Error fetching ${sheet}:`, error);
+              return null;
+            });
+        });
+
+        const allSheetsData = await Promise.all(allSheetRequests);
+        
+        // Process each URL against all sheets
+        for (const url of domainUrls) {
+          const videoTitle = getVideoTitle(url);
+          if (!videoTitle) continue;
+          
+          const normalizedVideoTitle = normalizeString(videoTitle);
+          let found = false;
+
+          // Search through all sheets
+          for (let i = 0; i < allSheetsData.length; i++) {
+            const data = allSheetsData[i];
+            if (!data || !data.values || data.values.length < 2) continue;
+
+            const matchingRow = data.values.find(row => {
+              if (!row[COLUMN_INDICES.URL]) return false;
+              const rowVideoTitle = getVideoTitle(row[COLUMN_INDICES.URL]);
+              if (!rowVideoTitle) return false;
+              return normalizeString(rowVideoTitle) === normalizedVideoTitle;
+            });
+
+            if (matchingRow) {
+              results[url] = {
+                success: true,
+                data: processMatchingRow(matchingRow)
+              };
+              found = true;
+              break;
+            }
+          }
+
+          if (!found) {
+            results[url] = {
+              success: false,
+              error: `Video not found in any sheet: ${normalizedVideoTitle}`
+            };
+          }
+        }
+      } else {
+        // Normal flow for other domains
+        const sheetName = SITE_MAPPINGS[domain];
+        if (!sheetName) {
+          for (const url of domainUrls) {
+            results[url] = {
+              success: false,
+              error: 'Site not supported'
+            };
+          }
+          continue;
+        }
+
+        // Fetch sheet data once for this domain
+        const response = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${sheetName}?key=${API_KEY}`
+        );
+
+        if (!response.ok) {
+          for (const url of domainUrls) {
+            results[url] = {
+              success: false,
+              error: 'Failed to fetch data from Google Sheets'
+            };
+          }
+          continue;
+        }
+
+        const data = await response.json();
+        if (!data.values || data.values.length < 2) {
+          for (const url of domainUrls) {
+            results[url] = {
+              success: false,
+              error: 'No data found in spreadsheet'
+            };
+          }
+          continue;
+        }
+
+        // Process each URL for this domain
+        for (const url of domainUrls) {
+          const videoTitle = getVideoTitle(url);
+          if (!videoTitle) {
+            results[url] = {
+              success: false,
+              error: 'Invalid video URL format'
+            };
+            continue;
+          }
+
+          const normalizedVideoTitle = normalizeString(videoTitle);
+          const matchingRow = data.values.find(row => {
+            if (!row[COLUMN_INDICES.URL]) return false;
+            const rowVideoTitle = getVideoTitle(row[COLUMN_INDICES.URL]);
+            if (!rowVideoTitle) return false;
+            return normalizeString(rowVideoTitle) === normalizedVideoTitle;
+          });
+
+          if (matchingRow) {
+            results[url] = {
+              success: true,
+              data: processMatchingRow(matchingRow)
+            };
+          } else {
+            results[url] = {
+              success: false,
+              error: `Video not found in spreadsheet: ${videoTitle}`
+            };
+          }
+        }
+      }
+    }
+
+    return results;
+  } catch (error) {
+    console.error('[Stats Extension] Error processing batch:', error);
+    return urls.reduce((acc, url) => {
+      acc[url] = {
+        success: false,
+        error: error.message
+      };
+      return acc;
+    }, {});
+  }
 } 

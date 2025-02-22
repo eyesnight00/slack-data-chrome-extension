@@ -97,6 +97,46 @@ For vixenplus.com URLs, the extension implements a comprehensive search across a
    - Compare normalized titles for exact matches
    - Return data from first matching sheet
 
+### Index Page Grade Display
+1. **Page Detection**:
+   ```javascript
+   function isIndexPage(url) {
+     // Check if URL matches /videos pattern without specific video
+     // Returns boolean indicating if current page is an index page
+   }
+   ```
+
+2. **Video Card Processing**:
+   ```javascript
+   function processVideoCards() {
+     // Find all video card elements on the page
+     // Extract video URLs
+     // Queue batch processing
+     // Handle dynamic loading (infinite scroll)
+   }
+   ```
+
+3. **Batch Data Fetching**:
+   - Group video URLs by domain
+   - Fetch sheet data in parallel
+   - Cache results for performance
+   - Handle rate limiting
+   - Process results in batches
+
+4. **Grade Display UI**:
+   - Create overlay element for each thumbnail
+   - Position grade display consistently
+   - Handle responsive layouts
+   - Maintain visibility during scroll/resize
+   - Support dark/light themes
+
+5. **Performance Optimization**:
+   - Implement request debouncing
+   - Cache sheet data responses
+   - Lazy load grade displays
+   - Optimize DOM operations
+   - Handle cleanup for removed elements
+
 ### URL Matching Logic
 1. **Domain Extraction**:
    - Remove 'www.' and 'members.' prefixes
@@ -147,6 +187,46 @@ For vixenplus.com URLs, the extension implements a comprehensive search across a
    - Validate required fields
    - Handle missing values
    - Type conversion
+
+### Logging System
+1. **Log Format**:
+   ```javascript
+   // Standard format for all logs
+   console.log('[Stats Extension] Category: Message', {
+     // Structured data for debugging
+     relevant_data: value,
+     additional_context: value
+   });
+   ```
+
+2. **Log Categories**:
+   - Initialization: Extension and page load events
+   - Page Detection: URL parsing and page type determination
+   - Video Processing: Card detection and data fetching
+   - UI Updates: Overlay creation and updates
+   - Error States: Failures and edge cases
+
+3. **Debug Information**:
+   - URL components (pathname, origin, search params)
+   - Page type detection results
+   - DOM element counts and selectors
+   - API request/response status
+   - Performance timing data
+
+4. **Log Levels**:
+   ```javascript
+   console.log()    // Standard information
+   console.info()   // Important success states
+   console.warn()   // Non-critical issues
+   console.error()  // Critical failures
+   console.debug()  // Detailed debugging info
+   ```
+
+5. **Initialization Logging**:
+   - Script injection confirmation
+   - DOM ready state
+   - URL change detection
+   - Feature initialization status
 
 ## 🔍 Testing Requirements
 

@@ -5,6 +5,23 @@ All notable changes to the Video Stats Chrome Extension project will be document
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- Index page grade display feature
+  - Display video grades on thumbnails in index pages
+  - Batch processing for multiple video cards
+  - Support for infinite scroll
+  - Optimized sheet data fetching
+  - Responsive grade overlay UI
+
+### Fixed
+- Enhanced logging system implementation
+  - Added detailed page type detection logs
+  - Fixed initialization logging sequence
+  - Added structured logging for debugging
+  - Improved log readability with consistent format
+  - Added video card processing status logs
+
 ## [1.1.0] - 2025-02-22
 
 ### Added
