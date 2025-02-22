@@ -6,18 +6,29 @@
   
   "permissions": [
     "storage",
-    "scripting"
+    "scripting",
+    "activeTab"
   ],
 
   "host_permissions": [
-    "https://members.blacked.com/*", "https://www.blacked.com/*",
-    "https://members.tushy.com/*", "https://www.tushy.com/*",
-    "https://members.vixen.com/*", "https://www.vixen.com/*",
-    "https://members.blackedraw.com/*", "https://www.blackedraw.com/*",
-    "https://members.tushyraw.com/*", "https://www.tushyraw.com/*",
-    "https://members.deeper.com/*", "https://www.deeper.com/*",
-    "https://members.milfy.com/*", "https://www.milfy.com/*",
-    "https://members.slayed.com/*", "https://www.slayed.com/*",
+    "https://members.blacked.com/*",
+    "https://www.blacked.com/*",
+    "https://members.tushy.com/*",
+    "https://www.tushy.com/*",
+    "https://members.vixen.com/*",
+    "https://www.vixen.com/*",
+    "https://members.blackedraw.com/*",
+    "https://www.blackedraw.com/*",
+    "https://members.tushyraw.com/*",
+    "https://www.tushyraw.com/*",
+    "https://members.deeper.com/*",
+    "https://www.deeper.com/*",
+    "https://members.milfy.com/*",
+    "https://www.milfy.com/*",
+    "https://members.slayed.com/*",
+    "https://www.slayed.com/*",
+    "https://members.vixenplus.com/*",
+    "https://www.vixenplus.com/*",
     "https://sheets.googleapis.com/v4/spreadsheets/*"
   ],
 
@@ -43,17 +54,28 @@
 
   "content_scripts": [{
     "matches": [
-      "https://members.blacked.com/*", "https://www.blacked.com/*",
-      "https://members.tushy.com/*", "https://www.tushy.com/*",
-      "https://members.vixen.com/*", "https://www.vixen.com/*",
-      "https://members.blackedraw.com/*", "https://www.blackedraw.com/*",
-      "https://members.tushyraw.com/*", "https://www.tushyraw.com/*",
-      "https://members.deeper.com/*", "https://www.deeper.com/*",
-      "https://members.milfy.com/*", "https://www.milfy.com/*",
-      "https://members.slayed.com/*", "https://www.slayed.com/*"
+      "https://members.blacked.com/*",
+      "https://www.blacked.com/*",
+      "https://members.tushy.com/*",
+      "https://www.tushy.com/*",
+      "https://members.vixen.com/*",
+      "https://www.vixen.com/*",
+      "https://members.blackedraw.com/*",
+      "https://www.blackedraw.com/*",
+      "https://members.tushyraw.com/*",
+      "https://www.tushyraw.com/*",
+      "https://members.deeper.com/*",
+      "https://www.deeper.com/*",
+      "https://members.milfy.com/*",
+      "https://www.milfy.com/*",
+      "https://members.slayed.com/*",
+      "https://www.slayed.com/*",
+      "https://members.vixenplus.com/*",
+      "https://www.vixenplus.com/*"
     ],
-    "js": ["src/content.js"],
-    "css": ["src/styles.css"]
+    "js": ["content.js"],
+    "css": ["styles.css"],
+    "run_at": "document_start"
   }],
 
   "content_security_policy": {
