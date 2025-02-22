@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Video Stats Viewer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "View video statistics from Google Sheets directly on video pages",
   
   "permissions": [
