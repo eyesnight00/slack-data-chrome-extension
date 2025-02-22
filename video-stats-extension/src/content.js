@@ -275,6 +275,9 @@ function isIndexPage() {
 function initialize() {
   console.log('[Stats Extension] Initializing on URL:', window.location.href);
   
+  // Clean up any existing overlays before initializing
+  cleanupOverlays();
+  
   if (isVideoPage()) {
     console.log('[Stats Extension] Video page detected, fetching stats');
     fetchVideoStats();
@@ -345,6 +348,26 @@ if (document.head) {
   observer.observe(document.documentElement, { childList: true });
 }
 
+// Function to cleanup overlays
+function cleanupOverlays() {
+  console.log('[Stats Extension] Cleaning up overlays');
+  
+  // Remove video page stats overlay
+  const statsContainer = document.getElementById('video-stats-container');
+  if (statsContainer) {
+    console.log('[Stats Extension] Removing stats container');
+    statsContainer.remove();
+  }
+
+  // Only remove grade overlays if we're not on an index page
+  if (!isIndexPage()) {
+    console.log('[Stats Extension] Removing grade overlays');
+    document.querySelectorAll('.video-grade-overlay').forEach(overlay => {
+      overlay.remove();
+    });
+  }
+}
+
 // Initialize the extension
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', safeInitialize);
@@ -358,6 +381,7 @@ new MutationObserver((mutations) => {
   if (currentPageUrl !== newUrl) {
     console.log('[Stats Extension] URL changed from', currentPageUrl, 'to', newUrl);
     currentPageUrl = newUrl;
+    cleanupOverlays();
     safeInitialize();
   }
 }).observe(document.documentElement, { 
