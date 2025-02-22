@@ -74,36 +74,43 @@ function updateStatsDisplay(stats) {
     <div style="margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 10px;">
       <h3 style="margin: 0 0 5px 0; font-size: 16px;">${stats.title}</h3>
       <p style="margin: 0; font-size: 12px; color: #aaa;">
-        Released: ${formatDate(stats.release_date)}<br>
+        Released: ${stats.is_future_release ? 'Coming Soon - ' : ''}${formatDate(stats.release_date)}<br>
         Director: ${stats.director}<br>
         Models: ${stats.models}
       </p>
     </div>
     
     <div style="font-size: 14px;">
-      <div style="margin-bottom: 15px;">
-        <h4 style="margin: 0 0 5px 0; font-size: 14px; color: #4CAF50;">Last 10 Days</h4>
-        <p style="margin: 3px 0;">Views: ${formatNumber(stats.views_10_days)}</p>
-        <p style="margin: 3px 0;">Minutes Watched: ${formatNumber(stats.minutes_watched_10_days)}</p>
-        <p style="margin: 3px 0;">Joins: ${formatNumber(stats.joins_10_days)}</p>
-      </div>
+      ${stats.is_future_release ? `
+        <div style="text-align: center; padding: 20px; color: #2196F3;">
+          <h4 style="margin: 0;">Coming Soon</h4>
+          <p style="margin: 10px 0 0 0;">Stats will be available after release</p>
+        </div>
+      ` : `
+        <div style="margin-bottom: 15px;">
+          <h4 style="margin: 0 0 5px 0; font-size: 14px; color: #4CAF50;">Last 10 Days</h4>
+          <p style="margin: 3px 0;">Views: ${formatNumber(stats.views_10_days)}</p>
+          <p style="margin: 3px 0;">Minutes Watched: ${formatNumber(stats.minutes_watched_10_days)}</p>
+          <p style="margin: 3px 0;">Joins: ${formatNumber(stats.joins_10_days)}</p>
+        </div>
 
-      <div style="margin-bottom: 15px;">
-        <h4 style="margin: 0 0 5px 0; font-size: 14px; color: #4CAF50;">All Time</h4>
-        <p style="margin: 3px 0;">Views: ${formatNumber(stats.views)}</p>
-        <p style="margin: 3px 0;">Minutes Watched: ${formatNumber(stats.minutes_watched)}</p>
-        <p style="margin: 3px 0;">Joins: ${formatNumber(stats.joins)}</p>
-        <p style="margin: 3px 0;">Comments: ${formatNumber(stats.comments)}</p>
-        <p style="margin: 3px 0;">Rating: ${stats.rating} (${formatNumber(stats.raters)} raters)</p>
-        <p style="margin: 3px 0;">Favorites: ${formatNumber(stats.favorites)}</p>
-        <p style="margin: 3px 0;">Trial Unlocks: ${formatNumber(stats.trial_unlocks)}</p>
-      </div>
+        <div style="margin-bottom: 15px;">
+          <h4 style="margin: 0 0 5px 0; font-size: 14px; color: #4CAF50;">All Time</h4>
+          <p style="margin: 3px 0;">Views: ${formatNumber(stats.views)}</p>
+          <p style="margin: 3px 0;">Minutes Watched: ${formatNumber(stats.minutes_watched)}</p>
+          <p style="margin: 3px 0;">Joins: ${formatNumber(stats.joins)}</p>
+          <p style="margin: 3px 0;">Comments: ${formatNumber(stats.comments)}</p>
+          <p style="margin: 3px 0;">Rating: ${stats.rating} (${formatNumber(stats.raters)} raters)</p>
+          <p style="margin: 3px 0;">Favorites: ${formatNumber(stats.favorites)}</p>
+          <p style="margin: 3px 0;">Trial Unlocks: ${formatNumber(stats.trial_unlocks)}</p>
+        </div>
 
-      <div style="margin-bottom: 10px;">
-        <h4 style="margin: 0 0 5px 0; font-size: 14px; color: #4CAF50;">Performance</h4>
-        <p style="margin: 3px 0;">Score: ${stats.score_model_16}</p>
-        <p style="margin: 3px 0;">Grade: ${stats.grade_model_16}</p>
-      </div>
+        <div style="margin-bottom: 10px;">
+          <h4 style="margin: 0 0 5px 0; font-size: 14px; color: #4CAF50;">Performance</h4>
+          <p style="margin: 3px 0;">Score: ${stats.score_model_16}</p>
+          <p style="margin: 3px 0;">Grade: ${stats.grade_model_16}</p>
+        </div>
+      `}
     </div>
 
     <button id="refresh-stats" style="
@@ -130,7 +137,7 @@ function updateStatsDisplay(stats) {
 }
 
 // Fetch video statistics
-async function fetchVideoStats() {
+export async function fetchVideoStats() {
   console.log('[Stats Extension] Fetching video stats for URL:', window.location.href);
   
   try {
@@ -155,7 +162,7 @@ async function fetchVideoStats() {
 }
 
 // Check if we're on a video page
-function isVideoPage() {
+export function isVideoPage() {
   const pathname = window.location.pathname;
   const segments = pathname.split('/').filter(Boolean);
   const isVideo = segments.length === 2 && segments[0] === 'videos';
@@ -178,7 +185,7 @@ function isVideoPage() {
 }
 
 // Check if we're on an index page
-function isIndexPage() {
+export function isIndexPage() {
   const pathname = window.location.pathname;
   const segments = pathname.split('/').filter(Boolean);
   const isIndex = segments.length === 1 && segments[0] === 'videos';
@@ -186,10 +193,12 @@ function isIndexPage() {
   console.log('[Stats Extension] Checking page type:', {
     type: 'INDEX PAGE CHECK',
     pathname: pathname,
+    full_url: window.location.href,
     segments_before_filter: pathname.split('/'),
     segments_after_filter: segments,
     segment_count: segments.length,
     first_segment: segments[0] || 'none',
+    has_query: window.location.search.length > 0,
     is_index_page: isIndex,
     reason: isIndex ? 
       'Matches index page pattern: exactly one segment "videos"' :
@@ -200,7 +209,7 @@ function isIndexPage() {
 }
 
 // Initialize when the page loads
-function initialize() {
+export function initialize() {
   console.log('[Stats Extension] Initializing on URL:', window.location.href);
   
   if (isVideoPage()) {
@@ -208,14 +217,40 @@ function initialize() {
     fetchVideoStats();
   } else if (isIndexPage()) {
     console.log('[Stats Extension] Index page detected, processing video cards');
+    // Initial processing
     processVideoCards();
+    
+    // Set up observer for dynamically loaded cards
+    const contentObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.addedNodes.length > 0) {
+          const hasNewCards = Array.from(mutation.addedNodes).some(node => {
+            return node.nodeType === 1 && (
+              node.classList?.contains('sc-1jdw134-0') ||
+              node.querySelector?.('.sc-1jdw134-0, [class*="VideoThumbnailContainer"]')
+            );
+          });
+          
+          if (hasNewCards) {
+            console.log('[Stats Extension] New video cards detected, processing...');
+            processVideoCards();
+          }
+        }
+      }
+    });
+    
+    // Start observing the main content area
+    contentObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
   } else {
     console.log('[Stats Extension] Not a supported page type (not an index or video page)');
   }
 }
 
 // Start the extension
-initialize();
+safeInitialize();
 
 // Listen for page updates (for single-page applications)
 new MutationObserver(() => {
@@ -227,109 +262,149 @@ new MutationObserver(() => {
   }
 }).observe(document.body, { subtree: true, childList: true });
 
-// Create grade overlay element
-function createGradeOverlay(grade) {
-  const overlay = document.createElement('div');
-  overlay.className = 'video-grade-overlay';
-  overlay.innerHTML = grade;
-  overlay.style.cssText = `
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 5px 10px;
-    border-radius: 4px;
-    font-size: 14px;
-    font-weight: bold;
-    z-index: 100;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  `;
-  return overlay;
-}
+// Also listen for load event
+window.addEventListener('load', () => {
+  console.log('[Stats Extension] Window load event fired, reinitializing');
+  initialize();
+});
 
-// Process all video cards on the page
-async function processVideoCards() {
+// Process video cards on the index page
+export async function processVideoCards() {
   console.log('[Stats Extension] Processing video cards on index page');
   
-  // Find all video cards using the specific data-test-component attribute
-  const videoCards = Array.from(document.querySelectorAll('[data-test-component="VideoThumbnailContainer"]'));
+  // Wait a short moment for dynamic content to load
+  await new Promise(resolve => setTimeout(resolve, 1000));
   
-  if (videoCards.length === 0) {
-    console.log('[Stats Extension] No video cards found');
-    return;
-  }
+  // Find all video cards
+  const videoCards = document.querySelectorAll('[data-test-component="VideoThumbnailContainer"]');
+  console.log('[Stats Extension] Found video cards:', videoCards.length);
 
-  // Extract URLs and create a map of URL to card element
+  // Create a batch of URLs to process
   const cardMap = new Map();
   const urls = [];
-  
+
   for (const card of videoCards) {
-    // Find the link using the specific class and href pattern
-    const link = card.querySelector('a[href^="/videos/"]');
-    if (link) {
-      // Construct the full URL using the current domain
-      const fullUrl = `${window.location.origin}${link.getAttribute('href')}`;
-      urls.push(fullUrl);
-      cardMap.set(fullUrl, card);
+    // Find the title link using the href pattern
+    const links = Array.from(card.getElementsByTagName('a'));
+    const titleLink = links.find(link => link.href && link.href.includes('/videos/'));
+    
+    if (!titleLink) {
+      console.log('[Stats Extension] No title link found for card');
+      continue;
     }
+
+    // Get the video URL and add to batch
+    const videoUrl = titleLink.href;
+    console.log('[Stats Extension] Found video URL:', videoUrl);
+    urls.push(videoUrl);
+    cardMap.set(videoUrl, card);
   }
 
   if (urls.length === 0) {
-    console.log('[Stats Extension] No valid video URLs found');
+    console.log('[Stats Extension] No valid URLs found in cards');
     return;
   }
 
-  console.log('[Stats Extension] Found video URLs:', urls);
-
-  // Fetch data for all URLs in a single batch request
   try {
+    // Request stats for all videos in batch
+    console.log('[Stats Extension] Requesting batch data for URLs:', urls);
     const response = await chrome.runtime.sendMessage({
       type: 'GET_SHEET_DATA',
       urls: urls
     });
+
+    console.log('[Stats Extension] Got batch response:', response);
 
     if (!response.success) {
       console.error('[Stats Extension] Batch request failed:', response.error);
       return;
     }
 
-    // Process results for each card
+    // Process each result
     for (const [url, result] of Object.entries(response.results)) {
       const card = cardMap.get(url);
-      if (!card) continue;
+      if (!card) {
+        console.log('[Stats Extension] No card found for URL:', url);
+        continue;
+      }
 
-      if (result.success && result.data) {
-        // Find the ProgressiveImage container which holds the thumbnail
-        const imageContainer = card.querySelector('[data-test-component="ProgressiveImage"]');
-        if (!imageContainer) continue;
+      // Create and add grade overlay
+      const grade = result.success && result.data ? result.data.grade_model_16 : 'No Data';
+      const gradeOverlay = createGradeOverlay(grade, result.success && result.data && result.data.is_future_release);
+      
+      // Find the thumbnail preview div
+      const thumbnailPreview = card.querySelector('[data-test-component="VideoThumbnailPreview"]');
+      console.log('[Stats Extension] Processing card:', {
+        url: url,
+        found_thumbnail: !!thumbnailPreview,
+        grade: grade,
+        success: result.success,
+        error: result.error
+      });
 
-        // Add position: relative to the container if needed
-        if (getComputedStyle(imageContainer).position === 'static') {
-          imageContainer.style.position = 'relative';
-        }
-
-        // Create and add the grade overlay
-        const grade = result.data.grade_model_16 || 'N/A';
-        const gradeOverlay = createGradeOverlay(grade);
+      if (thumbnailPreview) {
+        // Make sure the container is positioned relatively
+        thumbnailPreview.style.position = 'relative';
         
         // Remove any existing overlay
-        const existingOverlay = imageContainer.querySelector('.video-grade-overlay');
+        const existingOverlay = thumbnailPreview.querySelector('.video-grade-overlay');
         if (existingOverlay) {
           existingOverlay.remove();
         }
 
-        imageContainer.appendChild(gradeOverlay);
+        // Add the new overlay
+        thumbnailPreview.appendChild(gradeOverlay);
+        console.log('[Stats Extension] Successfully added grade overlay for:', url);
       } else {
-        console.log(`[Stats Extension] No data for video: ${url}`, result.error);
+        console.log('[Stats Extension] No thumbnail preview found for card:', {
+          url: url,
+          cardHTML: card.outerHTML.substring(0, 200) // First 200 chars for brevity
+        });
       }
     }
   } catch (error) {
     console.error('[Stats Extension] Error processing video cards:', error);
   }
+}
+
+// Create grade overlay element
+function createGradeOverlay(grade, isFutureRelease = false) {
+  const overlay = document.createElement('div');
+  overlay.className = 'video-grade-overlay';
+  
+  // Style based on grade
+  let backgroundColor = 'rgba(0, 0, 0, 0.85)';
+  let textColor = 'white';
+  
+  if (grade === 'No Data') {
+    backgroundColor = 'rgba(128, 128, 128, 0.85)';
+  } else if (grade === 'Error') {
+    backgroundColor = 'rgba(255, 82, 82, 0.85)';
+  } else if (grade === 'Unreleased') {
+    backgroundColor = 'rgba(33, 150, 243, 0.85)'; // Blue for unreleased
+  }
+
+  overlay.innerHTML = grade === 'Unreleased' ? 'Coming Soon' : `Grade: ${grade}`;
+  overlay.style.cssText = `
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: ${backgroundColor};
+    color: ${textColor};
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 2147483647;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    font-family: Arial, sans-serif;
+    letter-spacing: 0.5px;
+  `;
+  return overlay;
 }
 
 // Function to safely initialize
@@ -353,103 +428,14 @@ function safeInitialize() {
   }
 }
 
-// Also listen for load event
-window.addEventListener('load', () => {
-  console.log('[Stats Extension] Window load event fired, reinitializing');
-  initialize();
-});
-
-// Listen for page updates (for single-page applications)
-let lastUrl = window.location.href;
-const observer = new MutationObserver((mutations) => {
-  const currentUrl = window.location.href;
-  if (lastUrl !== currentUrl) {
-    console.log('[Stats Extension] URL changed from', lastUrl, 'to', currentUrl);
-    lastUrl = currentUrl;
-    // Add a small delay when URL changes to ensure page updates
-    setTimeout(() => {
-      initialize();
-    }, 500);
-  }
-});
-
-// Also observe for new video cards being added (infinite scroll)
-const cardObserver = new MutationObserver((mutations) => {
-  const newCards = new Set();
-  
-  for (const mutation of mutations) {
-    for (const node of mutation.addedNodes) {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        // Use the same selector as in processVideoCards
-        const cards = node.querySelectorAll('[data-test-component="VideoThumbnailContainer"]');
-        cards.forEach(card => newCards.add(card));
-      }
-    }
-  }
-
-  if (newCards.size > 0) {
-    console.log('[Stats Extension] Found new video cards:', newCards.size);
-    // Extract URLs and create a map of URL to card element
-    const cardMap = new Map();
-    const urls = [];
-    for (const card of newCards) {
-      const link = card.querySelector('a[href^="/videos/"]');
-      if (link) {
-        const fullUrl = `${window.location.origin}${link.getAttribute('href')}`;
-        urls.push(fullUrl);
-        cardMap.set(fullUrl, card);
-      }
-    }
-
-    if (urls.length === 0) {
-      console.log('[Stats Extension] No valid URLs found in new cards');
-      return;
-    }
-
-    console.log('[Stats Extension] Processing new URLs:', urls);
-
-    // Fetch data for all new cards in a batch
-    chrome.runtime.sendMessage({
-      type: 'GET_SHEET_DATA',
-      urls: urls
-    }).then(response => {
-      if (!response.success) {
-        console.error('[Stats Extension] Batch request failed for new cards:', response.error);
-        return;
-      }
-
-      // Process results for each new card
-      for (const [url, result] of Object.entries(response.results)) {
-        const card = cardMap.get(url);
-        if (!card) continue;
-
-        if (result.success && result.data) {
-          const imageContainer = card.querySelector('[data-test-component="ProgressiveImage"]');
-          if (!imageContainer) continue;
-
-          if (getComputedStyle(imageContainer).position === 'static') {
-            imageContainer.style.position = 'relative';
-          }
-
-          // Remove any existing overlay
-          const existingOverlay = imageContainer.querySelector('.video-grade-overlay');
-          if (existingOverlay) {
-            existingOverlay.remove();
-          }
-
-          const gradeOverlay = createGradeOverlay(result.data.grade_model_16 || 'N/A');
-          imageContainer.appendChild(gradeOverlay);
-        }
-      }
-    }).catch(error => {
-      console.error('[Stats Extension] Error processing new cards:', error);
-    });
-  }
-});
-
-// Start observers
-observer.observe(document.body, { subtree: true, childList: true });
-cardObserver.observe(document.body, { subtree: true, childList: true });
+// Export functions for testing
+export {
+  isVideoPage,
+  isIndexPage,
+  initialize,
+  fetchVideoStats,
+  processVideoCards
+};
 
 // Add styles for grade overlays
 const style = document.createElement('style');

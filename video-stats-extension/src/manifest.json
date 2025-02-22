@@ -6,7 +6,8 @@
   
   "permissions": [
     "storage",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
 
   "host_permissions": [
@@ -23,7 +24,7 @@
   ],
 
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "src/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -38,7 +39,7 @@
   },
 
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "src/background.js",
     "type": "module"
   },
 
@@ -54,9 +55,14 @@
       "https://members.slayed.com/*", "https://www.slayed.com/*",
       "https://members.vixenplus.com/*", "https://www.vixenplus.com/*"
     ],
-    "js": ["content.js"],
-    "css": ["styles.css"],
-    "run_at": "document_start"
+    "js": ["src/content.js"],
+    "type": "module",
+    "run_at": "document_end"
+  }],
+
+  "web_accessible_resources": [{
+    "resources": ["src/*"],
+    "matches": ["<all_urls>"]
   }],
 
   "content_security_policy": {
